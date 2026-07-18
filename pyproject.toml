@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools==83.0.0", "wheel==0.47.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semipulse-sentinel"
+version = "0.1.0"
+description = "Nightly semiconductor-market research report"
+requires-python = ">=3.11"
+dependencies = [
+    "jinja2>=3.1",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "yfinance==1.5.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "mypy>=1.11",
+    "pip-tools>=7.4",
+    "PyYAML>=6.0",
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "setuptools==83.0.0",
+    "wheel==0.47.0",
+]
+
+[project.scripts]
+semipulse-sentinel = "semipulse_sentinel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+semipulse_sentinel = ["templates/*.j2", "static/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

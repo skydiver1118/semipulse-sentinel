@@ -1,0 +1,4 @@
+interface:
+  display_name: "SemiPulse Sentinel"
+  short_description: "Inspect nightly semiconductor market reports"
+  default_prompt: "Use $semipulse-sentinel to summarize the latest semiconductor report and assess whether it needs a refresh."

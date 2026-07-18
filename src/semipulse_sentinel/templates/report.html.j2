@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Nightly semiconductor market evidence and deterministic interpretation.">
+  <title>{{ report.title }}</title>
+  <link rel="stylesheet" href="static/report.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to report</a>
+  <header class="page-header">
+    <p class="eyebrow">{{ report.agent.name }} · nightly market research</p>
+    <h1>{{ report.title }}</h1>
+    <dl class="metadata" aria-label="Report metadata">
+      <div><dt>Market as of</dt><dd>{{ report.market_as_of }}</dd></div>
+      <div><dt>Freshness</dt><dd><span class="badge badge-{{ report.freshness.state }}">{{ report.freshness.state }}</span></dd></div>
+      <div><dt>Coverage</dt><dd>{{ report.coverage.covered_count }}/{{ report.coverage.watchlist_count }} ({{ report.coverage.coverage_ratio }})</dd></div>
+      <div><dt>Built</dt><dd>{{ report.build.completed_at }}</dd></div>
+    </dl>
+  </header>
+
+  <main id="main-content">
+    <section id="executive-summary" aria-labelledby="summary-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Cross-chart synthesis</p>
+          <h2 id="summary-heading">Executive summary</h2>
+        </div>
+        <div class="regime" data-regime="{{ report.executive_summary.regime }}">
+          <span>{{ report.executive_summary.regime }}</span>
+          <strong>{{ report.executive_summary.score }}</strong>
+          <small>{{ report.executive_summary.confidence }} confidence</small>
+        </div>
+      </div>
+      <p class="posture"><strong>Conditional research posture:</strong> {{ report.executive_summary.posture }}</p>
+      <div class="summary-grid">
+        <section aria-labelledby="changed-heading">
+          <h3 id="changed-heading">What changed</h3>
+          <ul>{% for item in report.executive_summary.what_changed %}<li>{{ item }}</li>{% endfor %}</ul>
+        </section>
+        <section aria-labelledby="supports-heading">
+          <h3 id="supports-heading">Supports the view</h3>
+          <ul>{% for item in report.executive_summary.supports %}<li>{{ item }}</li>{% endfor %}</ul>
+        </section>
+        <section aria-labelledby="challenges-heading">
+          <h3 id="challenges-heading">Challenges the view</h3>
+          <ul>{% for item in report.executive_summary.challenges %}<li>{{ item }}</li>{% endfor %}</ul>
+        </section>
+        <section aria-labelledby="triggers-heading">
+          <h3 id="triggers-heading">What would change the view</h3>
+          <ul>{% for item in report.executive_summary.what_would_change_the_view %}<li>{{ item }}</li>{% endfor %}</ul>
+        </section>
+      </div>
+    </section>
+
+    <nav class="chart-nav" aria-label="Jump to a chart">
+      <h2>Eight-chart evidence map</h2>
+      <ol>{% for chart in report.charts %}<li><a href="#{{ chart.chart_id }}">{{ chart.title }}</a></li>{% endfor %}</ol>
+    </nav>
+
+    <section class="chart-stack" aria-label="Market charts and interpretations">
+      {% for chart in report.charts %}
+      <article class="chart-card" id="{{ chart.chart_id }}">
+        <header>
+          <p class="signal signal-{{ chart.signal }}">{{ chart.signal }}</p>
+          <h2>{{ chart.title }}</h2>
+          <p class="chart-headline">{{ chart.headline }}</p>
+        </header>
+        <figure>
+          <img src="{{ chart.image }}" alt="{{ chart.alt_text }}" width="1200" loading="lazy">
+          <figcaption>Observed market data through {{ report.market_as_of }}. Non-color encodings are included for accessibility.</figcaption>
+        </figure>
+        <div class="chart-analysis">
+          <section aria-labelledby="{{ chart.chart_id }}-evidence">
+            <h3 id="{{ chart.chart_id }}-evidence">Evidence</h3>
+            <ul>{% for item in chart.evidence %}<li>{{ item }}</li>{% endfor %}</ul>
+          </section>
+          <section aria-labelledby="{{ chart.chart_id }}-interpretation-heading">
+            <h3 id="{{ chart.chart_id }}-interpretation-heading">Interpretation</h3>
+            <p class="chart-interpretation">{{ chart.interpretation }}</p>
+          </section>
+          <section aria-labelledby="{{ chart.chart_id }}-relevance">
+            <h3 id="{{ chart.chart_id }}-relevance">Conditional trading relevance</h3>
+            <p>{{ chart.trading_relevance }}</p>
+          </section>
+          <section aria-labelledby="{{ chart.chart_id }}-counter">
+            <h3 id="{{ chart.chart_id }}-counter">Counter-signal</h3>
+            <p>{{ chart.counter_signal }}</p>
+          </section>
+        </div>
+        <details>
+          <summary>Calculation and coverage notes</summary>
+          <ul>{% for item in chart.notes %}<li>{{ item }}</li>{% endfor %}</ul>
+        </details>
+      </article>
+      {% endfor %}
+    </section>
+
+    <section id="signal-audit" aria-labelledby="audit-heading">
+      <p class="eyebrow">Recomputed from this download</p>
+      <h2 id="audit-heading">Five-session signal audit</h2>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Composite signal audit table">
+        <table>
+          <thead><tr><th scope="col">Session</th><th scope="col">Regime</th><th scope="col">Score</th><th scope="col">Inputs</th></tr></thead>
+          <tbody>{% for record in report.audit %}<tr><th scope="row">{{ record.as_of }}</th><td>{{ record.regime }}</td><td>{{ record.composite_score }}</td><td>{{ record.available_inputs }}/{{ record.expected_inputs }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <section aria-labelledby="provenance-heading">
+      <h2 id="provenance-heading">Data provenance and freshness</h2>
+      <p>{{ report.provenance.statement }}</p>
+      <dl class="footer-facts">
+        <div><dt>Provider</dt><dd>{{ report.provenance.provider }} {{ report.provenance.provider_version }}</dd></div>
+        <div><dt>Fetched</dt><dd>{{ report.freshness.fetched_at }}</dd></div>
+        <div><dt>Evaluated</dt><dd>{{ report.freshness.evaluated_at }}</dd></div>
+        <div><dt>Freshness state</dt><dd>{{ report.freshness.state }}; {{ report.freshness.expected_session_lag }} expected-session lag; {{ report.freshness.calendar_age_days }} calendar-day age</dd></div>
+        <div><dt>Expected/latest session</dt><dd>{{ report.freshness.expected_market_session }} / {{ report.freshness.latest_market_session }}</dd></div>
+        <div><dt>Upload identity verified</dt><dd>{{ report.provenance.upload_identity_verified }}</dd></div>
+        <div><dt>Watchlist fingerprint</dt><dd><code>{{ report.provenance.watchlist_sha256 }}</code></dd></div>
+      </dl>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Ordered watchlist source status table">
+        <table>
+          <thead><tr><th scope="col">Symbol</th><th scope="col">Source status</th></tr></thead>
+          <tbody>{% for item in report.provenance.source_statuses %}<tr><th scope="row">{{ item.symbol }}</th><td>{{ item.source_status }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="methodology-heading">
+      <h2 id="methodology-heading">Methodology</h2>
+      <p>Metrics {{ report.methodology.metrics_version }} · rules {{ report.methodology.rules_version }} · schema {{ report.methodology.report_schema_version }}. All return, trend, and risk calculations use adjusted close; unavailable observations are not imputed.</p>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Composite methodology table">
+        <table>
+          <thead><tr><th scope="col">Pillar</th><th scope="col">Weight</th><th scope="col">Fixed inputs</th></tr></thead>
+          <tbody>{% for item in report.methodology.pillars %}<tr><th scope="row">{{ item.name }}</th><td>{{ item.weight }}</td><td>{{ item.expected_inputs }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <p><strong>Nightly schedule:</strong> {{ report.schedule.description }} (cron <code>{{ report.schedule.cron }}</code>).</p>
+    </section>
+
+    <section aria-labelledby="exclusions-heading">
+      <h2 id="exclusions-heading">Coverage and exclusions</h2>
+      {% if report.coverage.exclusions %}<ul>{% for item in report.coverage.exclusions %}<li><strong>{{ item.symbol }} ({{ item.code }}):</strong> {{ item.reason }}</li>{% endfor %}</ul>{% else %}<p>No watchlist symbols were excluded from current aggregate calculations.</p>{% endif %}
+      {% if report.coverage.missing_optional %}<p>Optional series unavailable: {{ report.coverage.missing_optional|join(', ') }}.</p>{% endif %}
+      {% if report.coverage.warnings %}<ul>{% for item in report.coverage.warnings %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    </section>
+
+    <section aria-labelledby="limitations-heading">
+      <h2 id="limitations-heading">Limitations</h2>
+      <ul>{% for item in report.limitations %}<li>{{ item }}</li>{% endfor %}</ul>
+    </section>
+
+    <section class="risk-warning" aria-labelledby="risk-heading">
+      <h2 id="risk-heading">Risk warning</h2>
+      <p>{{ report.risk_warning }}</p>
+    </section>
+    <p class="build-line">Built by {{ report.agent.name }} {{ report.build.version }}. Static report; no orders, personalization, client-side data requests, or tracking.</p>
+  </footer>
+
+  <script id="report-data" type="application/json">{{ embedded_marker }}</script>
+</body>
+</html>
