@@ -5,15 +5,15 @@ semiconductor market. It downloads daily adjusted market data, validates its
 freshness and coverage, renders exactly eight SVG charts, and publishes a
 static HTML and JSON report only after the complete site passes validation.
 
-The target public repository identity is
-`skydiver1118/semipulse-sentinel`. The public repository, GitHub Pages setup,
-and first deployment have not yet been completed or independently verified.
-These canonical links are therefore pending until that setup succeeds:
+The public source and independently verified live endpoints are:
 
+- [GitHub repository](https://github.com/skydiver1118/semipulse-sentinel)
 - [SemiPulse Sentinel report](https://skydiver1118.github.io/semipulse-sentinel/)
-  - pending Pages setup and first successful deployment
 - [Canonical report.json](https://skydiver1118.github.io/semipulse-sentinel/report.json)
-  - pending Pages setup and first successful deployment
+
+GitHub Pages is configured for the audited Actions workflow. A successful
+manual deployment has verified the HTML, JSON, and all eight chart assets;
+subsequent refreshes are requested nightly at 6:00 PM America/New_York.
 
 ## What the report contains
 

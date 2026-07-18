@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
+from typing import Literal
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -328,6 +329,41 @@ def _risk_votes(scalars: Mapping[str, float]) -> tuple[int | None, ...]:
     )
 
 
+def _pillar_condition(
+    votes: Sequence[int | None],
+    *,
+    improvement: str,
+    deterioration: str,
+) -> tuple[str, ...]:
+    available = tuple(vote for vote in votes if vote is not None)
+    if not available:
+        return (
+            "Current vote mix is unavailable because required inputs are "
+            "missing. Published improvement thresholds: "
+            f"{improvement}.",
+        )
+    supportive = sum(vote > 0 for vote in available)
+    adverse = sum(vote < 0 for vote in available)
+    neutral = sum(vote == 0 for vote in available)
+    mix = (
+        f"Current vote mix: {supportive} supportive, {adverse} adverse, and "
+        f"{neutral} neutral across {len(available)} available votes."
+    )
+    signal = _signal_from_votes(available)
+    if signal == "positive":
+        return (
+            f"{mix} Published downside thresholds: {deterioration}.",
+        )
+    if signal == "negative":
+        return (
+            f"{mix} Published recovery thresholds: {improvement}.",
+        )
+    return (
+        f"{mix} Published downside thresholds: {deterioration}.",
+        f"Published upside thresholds: {improvement}.",
+    )
+
+
 def _absolute_trend(metrics: MetricBundle) -> PillarScore:
     scalars = metrics.scalars
     votes = _absolute_votes(scalars)
@@ -350,9 +386,17 @@ def _absolute_trend(metrics: MetricBundle) -> PillarScore:
             "SOXL is leveraged and path-dependent; its 20-session return is "
             f"{_format_decimal_percent(scalars, 'soxl_return_20')} (evidence only).",
         ),
-        (
-            "Absolute trend would weaken if 20-session returns fall to -3.0% "
-            "or both 20-/50-session average distances reach -0.5%.",
+        _pillar_condition(
+            votes,
+            improvement=(
+                "SMH and SOXX 20-session returns reach +3.0% and both "
+                "benchmarks move at least 0.5% above their 20-/50-session "
+                "averages"
+            ),
+            deterioration=(
+                "20-session returns fall to -3.0% or both 20-/50-session "
+                "average distances reach -0.5%"
+            ),
         ),
     )
 
@@ -375,9 +419,16 @@ def _relative_leadership(metrics: MetricBundle) -> PillarScore:
             f"63-session {_format_decimal_percent(scalars, 'soxx_qqq_return_63')}; "
             f"recent crossover {_format_crossover(scalars, 'soxx_qqq')}.",
         ),
-        (
-            "Relative leadership would weaken if both ratios lose 2.0% over "
-            "20 sessions or move at least 0.5% below both averages.",
+        _pillar_condition(
+            votes,
+            improvement=(
+                "both ratios gain 2.0% over 20 sessions and move at least "
+                "0.5% above both averages"
+            ),
+            deterioration=(
+                "both ratios lose 2.0% over 20 sessions or move at least "
+                "0.5% below both averages"
+            ),
         ),
     )
 
@@ -407,9 +458,16 @@ def _breadth_participation(metrics: MetricBundle) -> PillarScore:
             f"{_format_decimal_percent(scalars, 'participation_dispersion_63', signed=False)} "
             "(counter-evidence only).",
         ),
-        (
-            "Participation would weaken if 20-/50-session breadth reaches 40% "
-            "or the median participation spread falls to -3.0%.",
+        _pillar_condition(
+            votes,
+            improvement=(
+                "20-/50-session breadth reaches 60% and the median "
+                "participation spread reaches +3.0%"
+            ),
+            deterioration=(
+                "20-/50-session breadth reaches 40% or the median "
+                "participation spread falls to -3.0%"
+            ),
         ),
     )
 
@@ -438,9 +496,16 @@ def _momentum_distribution(metrics: MetricBundle) -> PillarScore:
             f"{_format_decimal_percent(scalars, 'momentum_iqr_20', signed=False)} "
             "(15 percentage points or more is a concentration warning).",
         ),
-        (
-            "Momentum would weaken if the median return reaches -3.0% or the "
-            "positive share reaches 40%.",
+        _pillar_condition(
+            votes,
+            improvement=(
+                "the median return reaches +3.0%, the positive share reaches "
+                "60%, and supported positive trend cells reach 60%"
+            ),
+            deterioration=(
+                "the median return reaches -3.0% or the positive share "
+                "reaches 40%"
+            ),
         ),
     )
 
@@ -463,9 +528,16 @@ def _volatility_drawdown_risk(metrics: MetricBundle) -> PillarScore:
             f"{_format_decimal_points(scalars, 'smh_vol_change_5')}.",
             f"VIX is {_format_number(scalars, 'vix_latest')}.",
         ),
-        (
-            "Risk conditions would worsen if volatility reaches its 70th "
-            "percentile, the peak distance reaches -10.0%, or VIX reaches 25.",
+        _pillar_condition(
+            votes,
+            improvement=(
+                "volatility falls to its 35th percentile, the peak distance "
+                "improves to -3.0%, and VIX falls to 18 or lower"
+            ),
+            deterioration=(
+                "volatility reaches its 70th percentile, the peak distance "
+                "reaches -10.0%, or VIX reaches 25"
+            ),
         ),
     )
 
@@ -630,16 +702,22 @@ def _signal_from_votes(votes: Sequence[int | None]) -> str:
 
 
 def _counter_signal(signal: str, weaker: str, stronger: str) -> str:
+    weaker_condition = weaker.strip().rstrip(".;")
+    stronger_condition = stronger.strip().rstrip(".;")
     if signal == "positive":
-        return f"Invalidation: {weaker}"
+        return f"Published downside thresholds: {weaker_condition}."
     if signal == "negative":
-        return f"Potential improvement: {stronger}"
+        return f"Published improvement thresholds: {stronger_condition}."
     if signal == "limited":
         return (
             "Limitation: missing evidence prevents a directional reading; "
-            f"improvement requires {stronger.lower()}"
+            "published improvement thresholds: "
+            f"{stronger_condition.lower()}."
         )
-    return f"Two-way trigger: the view improves if {stronger}; it weakens if {weaker}"
+    return (
+        f"Published two-way thresholds: improvement: {stronger_condition}; "
+        f"deterioration: {weaker_condition}."
+    )
 
 
 def _quality_note(quality: QualityReport) -> str:
@@ -1304,23 +1382,36 @@ def _quality_challenges(
             f"Only {available}/{EXPECTED_ATOM_COUNT} scoring inputs are available; missing atoms vote zero."
         )
     if quality.calendar_age_days is not None and quality.calendar_age_days > 0:
+        day_unit = "day" if quality.calendar_age_days == 1 else "days"
         challenges.append(
-            f"Market data is {quality.calendar_age_days} calendar days old."
+            f"Market data is {quality.calendar_age_days} calendar {day_unit} old."
         )
     if quality.expected_session_lag is not None and quality.expected_session_lag > 0:
+        session_unit = (
+            "session" if quality.expected_session_lag == 1 else "sessions"
+        )
         challenges.append(
-            f"Market data trails the expected session by {quality.expected_session_lag} session(s)."
+            "Market data trails the expected session by "
+            f"{quality.expected_session_lag} {session_unit}."
         )
     trend_missing = _number(metrics.scalars, "trend_missing_cells")
     if trend_missing is not None and trend_missing > 0:
-        challenges.append(f"{int(trend_missing)} trend cells are unsupported.")
+        trend_missing_count = int(trend_missing)
+        if trend_missing_count == 1:
+            challenges.append("1 trend cell is unsupported.")
+        else:
+            challenges.append(
+                f"{trend_missing_count} trend cells are unsupported."
+            )
     if len(audit) < 5:
         challenges.append(
             f"Five-session audit history is incomplete ({len(audit)}/5 snapshots)."
         )
     if quality.warnings:
+        warning_count = len(quality.warnings)
+        warning_unit = "warning" if warning_count == 1 else "warnings"
         challenges.append(
-            f"Quality gate reports {len(quality.warnings)} nonfatal warning(s)."
+            f"Quality gate reports {warning_count} nonfatal {warning_unit}."
         )
     return tuple(challenges)
 
@@ -1329,8 +1420,65 @@ def _pillar_label(pillar: PillarScore) -> str:
     return pillar.name.replace("_", " ")
 
 
+def _downside_condition(pillar: PillarScore, label: str) -> str:
+    if pillar.available_inputs == 0:
+        return (
+            f"{label} is indeterminate because {_pillar_label(pillar)} "
+            "inputs are unavailable."
+        )
+    return f"{label}: {pillar.counter_evidence[0]}"
+
+
+def _composite_threshold_status(
+    metrics: MetricBundle, direction: Literal["upside", "downside"]
+) -> str:
+    values = (
+        _number(metrics.scalars, "smh_return_20"),
+        _number(metrics.scalars, "soxx_return_20"),
+        _number(metrics.scalars, "breadth_above_20_pct"),
+        _number(metrics.scalars, "breadth_above_50_pct"),
+    )
+    if direction == "upside":
+        thresholds = (
+            Decimal("0.03"),
+            Decimal("0.03"),
+            Decimal("60"),
+            Decimal("60"),
+        )
+        active = sum(
+            value is not None and value >= threshold
+            for value, threshold in zip(values, thresholds, strict=True)
+        )
+        description = (
+            "SMH and SOXX 20-session returns at +3.0% or higher and "
+            "20-/50-session breadth at 60% or higher"
+        )
+    else:
+        thresholds = (
+            Decimal("-0.03"),
+            Decimal("-0.03"),
+            Decimal("40"),
+            Decimal("40"),
+        )
+        active = sum(
+            value is not None and value <= threshold
+            for value, threshold in zip(values, thresholds, strict=True)
+        )
+        description = (
+            "SMH and SOXX 20-session returns at -3.0% or lower and "
+            "20-/50-session breadth at 40% or lower"
+        )
+    unavailable = sum(value is None for value in values)
+    inactive = len(values) - active - unavailable
+    return (
+        f"Current published {direction} threshold status: {active} active, "
+        f"{inactive} inactive, and {unavailable} unavailable across four "
+        f"thresholds. Published {direction} thresholds are {description}."
+    )
+
+
 def _directional_summary(
-    pillars: Sequence[PillarScore], regime: str
+    pillars: Sequence[PillarScore], regime: str, metrics: MetricBundle
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     contributions = tuple(
         (pillar, pillar.value * pillar.weight) for pillar in pillars
@@ -1355,7 +1503,9 @@ def _directional_summary(
         else:
             weakest = min(contributions, key=lambda item: item[1])[0]
             challenges = (
-                "Invalidation condition: " + weakest.counter_evidence[0],
+                _downside_condition(
+                    weakest, "Published downside threshold context"
+                ),
             )
         return supports, challenges
 
@@ -1375,10 +1525,7 @@ def _directional_summary(
                 f"{improvement[0].value:+.2f} pillar score.",
             )
         else:
-            challenges = (
-                "Improvement condition: SMH and SOXX would need +3.0% "
-                "20-session returns while 20-/50-session breadth reaches 60%.",
-            )
+            challenges = (_composite_threshold_status(metrics, "upside"),)
         return supports, challenges
 
     if positive and negative:
@@ -1404,8 +1551,10 @@ def _directional_summary(
                 f"{_pillar_label(upside[0])} adds {upside[1]:+.2f}.",
             ),
             (
-                "Negative side is not yet active; downside trigger: "
-                + weakest.counter_evidence[0],
+                "Negative side is not yet active; "
+                + _downside_condition(
+                    weakest, "published downside threshold context"
+                ),
             ),
         )
     if negative:
@@ -1416,19 +1565,17 @@ def _directional_summary(
                 f"{_pillar_label(downside[0])} subtracts "
                 f"{abs(downside[1]):.2f}.",
             ),
-            (
-                "Positive side could improve if SMH and SOXX exceed +3.0% "
-                "over 20 sessions with breadth at 60%.",
-            ),
+            (_composite_threshold_status(metrics, "upside"),),
         )
     return (
         (
-            "No pillar has a nonzero weighted contribution; the mixed label "
-            "reflects neutral fixed-threshold votes.",
+            "No pillar has a nonzero net weighted contribution; the mixed "
+            "label can reflect neutral or offsetting fixed-threshold votes.",
         ),
         (
-            "Directional evidence could emerge if either positive confirmation "
-            "or negative deterioration crosses the published thresholds.",
+            "Net-zero pillar contributions can contain offsetting supportive "
+            "and adverse votes; current pillar vote mixes identify which "
+            "published thresholds are active.",
         ),
     )
 
@@ -1436,14 +1583,8 @@ def _directional_summary(
 def _change_triggers(
     regime: str, metrics: MetricBundle
 ) -> tuple[str, ...]:
-    improve = (
-        "The view could improve if SMH and SOXX exceed +3.0% over 20 sessions "
-        "while 20-/50-session breadth reaches 60%."
-    )
-    weaken = (
-        "The view would weaken if SMH and SOXX reach -3.0% over 20 sessions "
-        "or 20-/50-session breadth reaches 40%."
-    )
+    improve = _composite_threshold_status(metrics, "upside")
+    weaken = _composite_threshold_status(metrics, "downside")
     drawdown = _number(metrics.scalars, "smh_drawdown_63")
     volatility = _number(metrics.scalars, "smh_vol_percentile_252")
     missing_risk_inputs: list[str] = []
@@ -1485,8 +1626,9 @@ def _change_triggers(
         )
     else:
         risk = (
-            "Risk conditions would deteriorate if SMH reaches a -10.0% distance "
-            "from its 63-session peak or volatility reaches its 70th percentile."
+            "Published adverse risk thresholds are a -10.0% SMH distance from "
+            "its 63-session peak and the 70th volatility percentile; neither "
+            "is active."
         )
     if regime in {"risk-on", "constructive"}:
         return weaken, risk
@@ -1565,7 +1707,9 @@ def build_composite(
             "Five-session comparison is not yet available; this is the current "
             f"{score:+.2f} snapshot."
         )
-    supports, directional_challenges = _directional_summary(pillars, regime)
+    supports, directional_challenges = _directional_summary(
+        pillars, regime, metrics
+    )
     challenges = (
         *directional_challenges,
         *_quality_challenges(

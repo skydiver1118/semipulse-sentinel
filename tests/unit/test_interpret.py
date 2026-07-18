@@ -344,6 +344,79 @@ def test_all_threshold_boundaries_vote_inclusively(
     )
 
 
+def test_pillar_counter_evidence_tracks_each_current_state() -> None:
+    positive = score_pillars(_bundle(scalar_updates=POSITIVE))
+    negative = score_pillars(_bundle(scalar_updates=NEGATIVE))
+    mixed = score_pillars(_bundle())
+    limited = score_pillars(_bundle(all_missing=True))
+
+    assert all(
+        "Published downside thresholds:" in pillar.counter_evidence[0]
+        for pillar in positive
+    )
+    assert all(
+        "Published recovery thresholds:" in pillar.counter_evidence[0]
+        for pillar in negative
+    )
+    assert all(
+        "Published downside thresholds:" in pillar.counter_evidence[0]
+        and "Published upside thresholds:" in pillar.counter_evidence[1]
+        for pillar in mixed
+    )
+    assert all(
+        "vote mix is unavailable" in pillar.counter_evidence[0]
+        and "Published improvement thresholds:" in pillar.counter_evidence[0]
+        for pillar in limited
+    )
+    all_conditions = " ".join(
+        condition
+        for pillar in (*positive, *negative, *mixed, *limited)
+        for condition in pillar.counter_evidence
+    ).lower()
+    assert "would weaken if" not in all_conditions
+    assert "would worsen if" not in all_conditions
+    assert "would improve once" not in all_conditions
+    assert "would ease once" not in all_conditions
+
+
+def test_pillar_conditions_disclose_mixed_atom_votes_without_future_tense() -> None:
+    positive_with_active_downside = {
+        **POSITIVE,
+        "smh_return_20": -0.03,
+        "smh_qqq_return_20": -0.02,
+        "breadth_above_20_pct": 40.0,
+        "momentum_median_20": -0.03,
+        "smh_vol_percentile_252": 70.0,
+    }
+    positive = score_pillars(
+        _bundle(scalar_updates=positive_with_active_downside)
+    )
+
+    assert all(pillar.value > 0 for pillar in positive)
+    assert all(
+        "1 adverse" in pillar.counter_evidence[0] for pillar in positive
+    )
+    assert all(
+        "Published downside thresholds:" in pillar.counter_evidence[0]
+        for pillar in positive
+    )
+
+    negative_with_active_recovery = {
+        **NEGATIVE,
+        "breadth_above_20_pct": 60.0,
+        "breadth_above_50_pct": 60.0,
+        "participation_spread_63": 0.03,
+    }
+    breadth = score_pillars(
+        _bundle(scalar_updates=negative_with_active_recovery)
+    )[2]
+
+    assert breadth.value == Decimal("-0.5")
+    assert "3 supportive" in breadth.counter_evidence[0]
+    assert "Published recovery thresholds:" in breadth.counter_evidence[0]
+    assert "would improve once" not in breadth.counter_evidence[0]
+
+
 def test_missing_atoms_are_zero_without_denominator_renormalization() -> None:
     missing = score_pillars(_bundle(all_missing=True))
     one_vote = score_pillars(
@@ -464,7 +537,9 @@ def test_chart_specific_signals_do_not_leak_across_pillar_components() -> None:
 
     assert insights[2].signal == "positive"
     assert insights[3].signal == "negative"
-    assert insights[3].counter_signal.startswith("Potential improvement:")
+    assert insights[3].counter_signal.startswith(
+        "Published improvement thresholds:"
+    )
 
     risk_reward_positive = _bundle(
         scalar_updates={
@@ -491,9 +566,9 @@ def test_chart_specific_signals_do_not_leak_across_pillar_components() -> None:
 @pytest.mark.parametrize(
     ("updates", "all_missing", "signal", "prefix"),
     [
-        (POSITIVE, False, "positive", "Invalidation:"),
-        (NEGATIVE, False, "negative", "Potential improvement:"),
-        ({}, False, "mixed", "Two-way trigger:"),
+        (POSITIVE, False, "positive", "Published downside thresholds:"),
+        (NEGATIVE, False, "negative", "Published improvement thresholds:"),
+        ({}, False, "mixed", "Published two-way thresholds:"),
         ({}, True, "limited", "Limitation:"),
     ],
 )
@@ -509,6 +584,8 @@ def test_every_counter_signal_agrees_with_its_chart_signal(
 
     assert {item.signal for item in insights} == {signal}
     assert all(item.counter_signal.startswith(prefix) for item in insights)
+    assert all(item.counter_signal.endswith(".") for item in insights)
+    assert all(".;" not in item.counter_signal for item in insights)
 
 
 def test_chart_one_prints_compact_multi_horizon_and_peak_distance_evidence() -> None:
@@ -621,6 +698,29 @@ def test_quality_facts_cap_confidence(quality: QualityReport, expected: str) -> 
     assert summary.confidence == expected
 
 
+def test_quality_challenges_pluralize_counts() -> None:
+    metrics = _bundle(scalar_updates={"trend_missing_cells": 1.0})
+    summary = build_composite(
+        interpret_charts(metrics, _quality()),
+        metrics,
+        _quality(
+            calendar_age_days=1,
+            expected_session_lag=1,
+            warnings=("provider_notice",),
+        ),
+    )
+    text = " ".join(summary.challenges)
+
+    assert "1 calendar day old" in text
+    assert "1 calendar days" not in text
+    assert "by 1 session." in text
+    assert "session(s)" not in text
+    assert "1 nonfatal warning." in text
+    assert "warning(s)" not in text
+    assert "1 trend cell is unsupported." in text
+    assert "1 trend cells" not in text
+
+
 def test_input_and_history_missingness_caps_confidence() -> None:
     metrics = _bundle(scalar_updates={"vix_latest": float("nan")})
     short_audit = build_composite_audit([metrics], current=metrics)
@@ -681,8 +781,8 @@ def test_neutral_composite_has_both_upside_and_downside_paths() -> None:
 
     assert summary.score == Decimal("0.00")
     assert summary.regime == "mixed"
-    assert "improve" in text or "strengthen" in text
-    assert "weaken" in text or "deteriorate" in text
+    assert "upside threshold status" in text
+    assert "downside threshold status" in text
 
 
 def test_active_risk_threshold_is_not_described_as_an_unmet_trigger() -> None:
@@ -697,15 +797,79 @@ def test_active_risk_threshold_is_not_described_as_an_unmet_trigger() -> None:
     assert "risk conditions would deteriorate if" not in triggers
 
 
-def test_inactive_risk_threshold_remains_a_future_trigger() -> None:
+def test_inactive_risk_threshold_is_reported_as_current_threshold_state() -> None:
     metrics = _bundle()
     summary = build_composite(
         interpret_charts(metrics, _quality()), metrics, _quality()
     )
 
-    assert any(
-        "risk conditions would deteriorate if" in item.lower()
-        for item in summary.change_triggers
+    triggers = " ".join(summary.change_triggers).lower()
+
+    assert "published adverse risk thresholds" in triggers
+    assert "neither is active" in triggers
+    assert "would deteriorate if" not in triggers
+
+
+def test_risk_on_change_trigger_counts_already_active_downside_atoms() -> None:
+    metrics = _bundle(
+        scalar_updates={
+            **POSITIVE,
+            "smh_return_20": -0.03,
+            "soxx_return_20": -0.03,
+        }
+    )
+    summary = build_composite(
+        interpret_charts(metrics, _quality()), metrics, _quality()
+    )
+    triggers = " ".join(summary.change_triggers).lower()
+
+    assert summary.regime == "risk-on"
+    assert "downside threshold status: 2 active, 2 inactive" in triggers
+    assert "would weaken if" not in triggers
+
+
+def test_risk_off_summary_counts_already_active_upside_atoms() -> None:
+    metrics = _bundle(
+        scalar_updates={
+            **NEGATIVE,
+            "smh_return_20": 0.03,
+            "soxx_return_20": 0.03,
+            "breadth_above_20_pct": 60.0,
+            "breadth_above_50_pct": 60.0,
+        }
+    )
+    summary = build_composite(
+        interpret_charts(metrics, _quality()), metrics, _quality()
+    )
+    text = summary.as_text().lower()
+
+    assert summary.regime == "risk-off"
+    assert "upside threshold status: 4 active, 0 inactive" in text
+    assert "would need" not in text
+    assert "could improve if" not in text
+
+
+def test_composite_threshold_status_counts_unavailable_atoms() -> None:
+    metrics = _bundle(
+        scalar_updates={
+            "smh_return_20": float("nan"),
+            "soxx_return_20": 0.04,
+            "breadth_above_20_pct": 55.0,
+            "breadth_above_50_pct": float("nan"),
+        }
+    )
+    summary = build_composite(
+        interpret_charts(metrics, _quality()), metrics, _quality()
+    )
+    triggers = " ".join(summary.change_triggers).lower()
+
+    assert (
+        "upside threshold status: 1 active, 1 inactive, and 2 unavailable"
+        in triggers
+    )
+    assert (
+        "downside threshold status: 0 active, 2 inactive, and 2 unavailable"
+        in triggers
     )
 
 
@@ -847,7 +1011,7 @@ def test_composite_prose_is_regime_aware_for_positive_negative_mixed_and_zero() 
         _quality(),
     )
     assert "positive contribution" in positive.supports[0].lower()
-    assert "invalidation" in positive.challenges[0].lower()
+    assert "published downside threshold context" in positive.challenges[0].lower()
 
     negative_metrics = _bundle(scalar_updates=NEGATIVE)
     negative = build_composite(
@@ -856,7 +1020,7 @@ def test_composite_prose_is_regime_aware_for_positive_negative_mixed_and_zero() 
         _quality(),
     )
     assert "defensive contribution" in negative.supports[0].lower()
-    assert "improvement" in negative.challenges[0].lower()
+    assert "upside threshold status" in negative.challenges[0].lower()
     assert "positive contribution" not in negative.supports[0].lower()
 
     mixed_metrics = _offsetting_bundle(as_of=AS_OF)
@@ -872,7 +1036,68 @@ def test_composite_prose_is_regime_aware_for_positive_negative_mixed_and_zero() 
         interpret_charts(zero_metrics, _quality()), zero_metrics, _quality()
     )
     assert "no pillar has a nonzero" in zero.supports[0].lower()
-    assert "directional" in zero.challenges[0].lower()
+    assert "offsetting" in zero.challenges[0].lower()
+
+
+def test_zero_contribution_summary_discloses_offsetting_active_votes() -> None:
+    metrics = _bundle(
+        scalar_updates={
+            "smh_return_20": 0.03,
+            "smh_return_63": -0.08,
+        }
+    )
+    summary = build_composite(
+        interpret_charts(metrics, _quality()), metrics, _quality()
+    )
+    text = summary.as_text().lower()
+
+    assert summary.score == Decimal("0.00")
+    assert summary.regime == "mixed"
+    assert "neutral or offsetting" in summary.supports[0].lower()
+    assert "1 supportive, 1 adverse" in text
+    assert "upside threshold status: 1 active" in text
+    assert "could emerge if" not in text
+    assert "crosses the published thresholds" not in text
+
+
+def test_directional_summary_does_not_label_upside_text_as_downside() -> None:
+    positive_updates = {
+        **POSITIVE,
+        "smh_vol_percentile_252": float("nan"),
+        "smh_drawdown_63": float("nan"),
+        "smh_vol_change_5": float("nan"),
+        "vix_latest": float("nan"),
+    }
+    positive_metrics = _bundle(scalar_updates=positive_updates)
+    positive = build_composite(
+        interpret_charts(positive_metrics, _quality()),
+        positive_metrics,
+        _quality(),
+    )
+
+    assert positive.regime == "risk-on"
+    assert (
+        "published downside threshold context is indeterminate"
+        in positive.challenges[0].lower()
+    )
+    assert "improvement" not in positive.challenges[0].lower()
+
+    mixed_metrics = _bundle(
+        all_missing=True,
+        scalar_updates={"smh_return_20": 0.20},
+    )
+    mixed = build_composite(
+        interpret_charts(mixed_metrics, _quality()),
+        mixed_metrics,
+        _quality(),
+    )
+
+    assert mixed.regime == "mixed"
+    assert (
+        "published downside threshold context is indeterminate"
+        in mixed.challenges[0].lower()
+    )
+    assert "improvement" not in mixed.challenges[0].lower()
 
 
 def test_composite_preserves_and_validates_nested_audit_records() -> None:

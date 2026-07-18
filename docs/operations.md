@@ -1,10 +1,12 @@
 # Operations
 
-This runbook covers the intended public identity
-`skydiver1118/semipulse-sentinel`. The public GitHub repository, Pages
-configuration, and first deployment have not yet been completed or verified.
-Until they are, the canonical report and `report.json` URLs shown in the
-README are pending rather than live-service claims.
+This runbook covers the live public repository
+`skydiver1118/semipulse-sentinel`. GitHub Pages uses the audited Actions
+workflow, and the first deployment has been verified. The canonical report and
+structured JSON are:
+
+- `https://skydiver1118.github.io/semipulse-sentinel/`
+- `https://skydiver1118.github.io/semipulse-sentinel/report.json`
 
 ## Schedule and delivery guarantees
 
@@ -32,10 +34,12 @@ The workflow also exposes `workflow_dispatch` for recovery and verification.
 Concurrency is limited to the `semipulse-pages` group, with an older in-flight
 run canceled when a newer run begins.
 
-## One-time GitHub Pages setup
+## GitHub Pages setup and recovery
 
 Pages enablement is an out-of-band repository administration step; the
-workflow intentionally does not enable Pages on its own.
+workflow intentionally does not enable Pages on its own. The canonical
+repository is already configured; use this checklist when recreating the site
+or validating a replacement repository.
 
 1. Create the public repository as `skydiver1118/semipulse-sentinel`, push the
    reviewed default branch, and confirm that the Actions workflow is present.
