@@ -1640,27 +1640,27 @@ def _change_triggers(
 def _posture(regime: str) -> str:
     if regime == "risk-on":
         return (
-            "Conditional research posture: trend participation is broad enough "
+            "Trend participation is broad enough "
             "to study continuation scenarios, while leverage and invalidation "
             "conditions remain explicit."
         )
     if regime == "constructive":
         return (
-            "Conditional research posture: continuation scenarios have support, "
+            "Continuation scenarios have support, "
             "but concentration, breadth, and volatility counter-signals still matter."
         )
     if regime == "mixed":
         return (
-            "Conditional research posture: evidence is balanced, so both upside "
+            "Evidence is balanced, so both upside "
             "confirmation and downside deterioration scenarios remain active."
         )
     if regime == "defensive":
         return (
-            "Conditional research posture: downside-risk scenarios have more "
+            "Downside-risk scenarios have more "
             "support until participation and leadership improve."
         )
     return (
-        "Conditional research posture: stress evidence dominates; improvement "
+        "Stress evidence dominates; improvement "
         "requires trend, breadth, and risk conditions to confirm together."
     )
 

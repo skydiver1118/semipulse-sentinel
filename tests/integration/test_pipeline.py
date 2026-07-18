@@ -212,6 +212,12 @@ def test_complete_site_uses_one_model_for_summary_and_eight_cards(
     assert html.index('id="executive-summary"') < html.index('id="chart-1"')
     assert html.count('class="chart-card"') == 8
     assert html.count('class="chart-interpretation"') == 8
+    posture_start = html.index('<p class="posture">')
+    posture_end = html.index("</p>", posture_start)
+    assert (
+        html[posture_start:posture_end].count("Conditional research posture:")
+        == 1
+    )
     assert [item["chart_id"] for item in report["charts"]] == [
         f"chart-{number}" for number in range(1, 9)
     ]
