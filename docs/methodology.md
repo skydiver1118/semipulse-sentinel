@@ -116,8 +116,11 @@ are SMH, SOXX, QQQ, and SOXL; VIX is optional.
 
 Publication fails below 70% watchlist coverage or when a required benchmark is
 missing, stale, or has insufficient history. Publication also requires no
-duplicate symbol/date rows, valid dates and prices, and exactly eight validated
-artifacts. Confidence is capped low for coverage below 70%, a missing required
+duplicate symbol/date rows, valid dates and prices, no consecutive adjusted-
+price ratio near 100x or 0.01x, and exactly eight validated artifacts. The
+ratio gate treats a 90x-110x scale switch (or its reciprocal) as a likely
+currency-unit mixup and blocks publication rather than altering the source
+data. Confidence is capped low for coverage below 70%, a missing required
 input, data more than three calendar days old, a wholly unavailable pillar, or
 fewer than 70% of the fixed scoring inputs. Other incompleteness - including
 coverage below 90%, optional-data gaps, warnings, cases where the
@@ -146,8 +149,11 @@ The default adapter is pinned to `yfinance==1.5.1`. It is a keyless,
 unofficial source intended for personal research, not a licensed or
 execution-quality market-data feed. Data can be delayed, incomplete, revised,
 or temporarily unavailable. A fetch uses bounded retries of no more than three
-attempts, and daily bars do not describe intraday moves after the latest
-completed bar.
+attempts. Upstream price repair is disabled because it can return an empty
+multi-symbol frame on hosted Linux; the fail-closed unit-discontinuity gate
+above protects against its principal 100x scale-error class without silently
+rewriting provider values. Daily bars do not describe intraday moves after the
+latest completed bar.
 
 The current `config/watchlist.csv` is an explicitly labeled recovered seed.
 The missing upload's identity was not verifiable, so every row remains

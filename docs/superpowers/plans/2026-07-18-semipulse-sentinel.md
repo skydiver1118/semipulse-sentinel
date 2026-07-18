@@ -200,7 +200,7 @@ Expected: failures for missing provider and validator modules.
 
 - [ ] **Step 3: Implement provider and validation**
 
-Call `yfinance.download` once for the combined symbol set with `period="2y"`, `interval="1d"`, `auto_adjust=False`, `actions=False`, `group_by="column"`, `threads=True`, `repair=True`, and a 30-second timeout. Normalize single- and multi-index results identically. Retry at most three times with injected sleep, and never log cookies or raw responses.
+Call `yfinance.download` once for the combined symbol set with `period="2y"`, `interval="1d"`, `auto_adjust=False`, `actions=False`, `group_by="column"`, `threads=True`, `repair=False`, and a 30-second timeout. Upstream repair is disabled because yfinance 1.5.1 can return an empty multi-symbol frame on hosted Linux; the validator instead blocks near-100x adjusted-price unit discontinuities. Normalize single- and multi-index results identically. Retry at most three times with injected sleep, and never log cookies or raw responses.
 
 Validation must check:
 

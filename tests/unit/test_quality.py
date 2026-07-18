@@ -197,6 +197,32 @@ def test_quality_blocks_invalid_adjusted_prices_for_any_symbol(
         )
 
 
+@pytest.mark.parametrize("unit_scale", [100.0, 0.01])
+def test_quality_blocks_adjusted_price_unit_discontinuities(
+    unit_scale: float,
+    complete_market_data: MarketData,
+    app_config: AppConfig,
+    recovered_watchlist: tuple[WatchlistEntry, ...],
+) -> None:
+    prices = complete_market_data.prices.copy()
+    aaoi_rows = prices.index[prices["symbol"] == "AAOI"]
+    previous_row, latest_row = aaoi_rows[-2:]
+    prices.loc[latest_row, "adj_close"] = (
+        prices.loc[previous_row, "adj_close"] * unit_scale
+    )
+
+    with pytest.raises(
+        PublicationBlocked,
+        match=r"adjusted_price_unit_discontinuity:AAOI",
+    ):
+        validate_market_data(
+            _replace_prices(complete_market_data, prices),
+            app_config,
+            recovered_watchlist,
+            NOW,
+        )
+
+
 def test_quality_blocks_when_any_required_latest_bar_is_stale(
     complete_market_data: MarketData,
     app_config: AppConfig,

@@ -74,7 +74,7 @@ def test_provider_normalizes_to_tidy_adjusted_ohlcv(
     assert data.errors == ()
 
 
-def test_provider_uses_one_combined_call_with_exact_download_options(
+def test_provider_uses_one_combined_call_with_hosted_safe_download_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[list[str], dict[str, Any]]] = []
@@ -97,7 +97,7 @@ def test_provider_uses_one_combined_call_with_exact_download_options(
                 "actions": False,
                 "group_by": "column",
                 "threads": True,
-                "repair": True,
+                "repair": False,
                 "timeout": 30,
             },
         )

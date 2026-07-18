@@ -23,7 +23,7 @@ _DOWNLOAD_OPTIONS: dict[str, object] = {
     "actions": False,
     "group_by": "column",
     "threads": True,
-    "repair": True,
+    "repair": False,
     "timeout": 30,
 }
 _FIELD_NAMES = {

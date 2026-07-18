@@ -16,6 +16,8 @@ from semipulse_sentinel.watchlist import WatchlistEntry
 
 MINIMUM_COVERAGE_SESSIONS = 64
 _SESSION_CLOSE_BUFFER = time(16, 15)
+_UNIT_MIXUP_RATIO_MIN = 90.0
+_UNIT_MIXUP_RATIO_MAX = 110.0
 
 
 class PublicationBlocked(RuntimeError):
@@ -144,6 +146,34 @@ def validate_market_data(
             key=rank.__getitem__,
         )
     )
+    eligible_price_rows = valid_dates.loc[
+        ~invalid_price_mask, ["symbol", "date", "adj_close"]
+    ].sort_values(["symbol", "date"], kind="stable")
+    previous_adjusted_close = eligible_price_rows.groupby(
+        "symbol", sort=False
+    )["adj_close"].shift()
+    adjusted_close_ratio = (
+        eligible_price_rows["adj_close"] / previous_adjusted_close
+    )
+    reciprocal_min = 1.0 / _UNIT_MIXUP_RATIO_MAX
+    reciprocal_max = 1.0 / _UNIT_MIXUP_RATIO_MIN
+    unit_discontinuity_mask = adjusted_close_ratio.between(
+        _UNIT_MIXUP_RATIO_MIN,
+        _UNIT_MIXUP_RATIO_MAX,
+        inclusive="both",
+    ) | adjusted_close_ratio.between(
+        reciprocal_min,
+        reciprocal_max,
+        inclusive="both",
+    )
+    unit_discontinuity_symbols = tuple(
+        sorted(
+            set(
+                eligible_price_rows.loc[unit_discontinuity_mask, "symbol"]
+            ),
+            key=rank.__getitem__,
+        )
+    )
 
     latest_dates = valid_dates.groupby("symbol", sort=False)["date"].max()
     present = set(latest_dates.index)
@@ -168,10 +198,10 @@ def validate_market_data(
 
     stale_set = set(stale_symbols)
     invalid_set = set(invalid_price_symbols)
+    unit_discontinuity_set = set(unit_discontinuity_symbols)
     future_set = set(future_symbols)
     coverage_counts = (
-        valid_dates.loc[~invalid_price_mask]
-        .groupby("symbol", sort=False)["date"]
+        eligible_price_rows.groupby("symbol", sort=False)["date"]
         .nunique()
     )
     insufficient_required = tuple(
@@ -187,6 +217,7 @@ def validate_market_data(
         if coverage_counts.get(symbol, 0) >= MINIMUM_COVERAGE_SESSIONS
         and symbol not in stale_set
         and symbol not in invalid_set
+        and symbol not in unit_discontinuity_set
         and symbol not in future_set
     )
     covered_set = set(covered_symbols)
@@ -219,6 +250,13 @@ def validate_market_data(
     if invalid_price_symbols:
         reason_codes.append(
             _reason("invalid_adjusted_prices", invalid_price_symbols)
+        )
+    if unit_discontinuity_symbols:
+        reason_codes.append(
+            _reason(
+                "adjusted_price_unit_discontinuity",
+                unit_discontinuity_symbols,
+            )
         )
     stale_required = tuple(
         symbol for symbol in config.required_benchmarks if symbol in stale_set
