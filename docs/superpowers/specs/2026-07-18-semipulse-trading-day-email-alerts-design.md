@@ -81,6 +81,11 @@ roll back or remove the valid report; the notification job fails visibly so the
 missing alert can be diagnosed and retried. The notifier must not print passwords,
 tokens, or full environment values.
 
+After this feature is deployed and its secrets are configured, operations send one
+clearly labeled activation email containing the current canonical report link. This
+one-time delivery verifies the reused SOXL sender path. Subsequent automated alerts
+remain limited to successful deployments whose `market_as_of` advances.
+
 ## Components
 
 ### Market-session advancement decision
@@ -135,6 +140,7 @@ be committed, echoed, attached as artifacts, or included in generated reports.
 - The public report remains available at the canonical dashboard URL.
 - Scheduled workflow requests occur Monday through Friday at 6:00 PM Eastern.
 - A newly completed market session produces one validated deployment and one email.
+- Initial activation produces one labeled delivery test with the canonical link.
 - An exchange holiday, provider lag, or duplicate market date produces no
   deployment and no duplicate email while retaining the last valid report.
 - A failed candidate never replaces the last successful report.
