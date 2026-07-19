@@ -42,6 +42,15 @@ def _parser() -> argparse.ArgumentParser:
     doctor.add_argument("--watchlist", type=Path, default=Path("config/watchlist.csv"))
     doctor.add_argument("--site", type=Path, default=Path("site"))
     doctor.add_argument("--json", action="store_true", dest="json_output")
+
+    publication = commands.add_parser(
+        "decide-publication",
+        help="Compare a candidate report with the published market date",
+    )
+    publication.add_argument("--candidate", type=Path, required=True)
+    publication.add_argument("--published", type=Path, required=True)
+    publication.add_argument("--github-output", type=Path, required=True)
+    publication.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
 
@@ -160,6 +169,30 @@ def _doctor(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _decide_publication(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.publication import (
+        append_github_outputs,
+        decide_publication,
+        read_report_snapshot,
+    )
+
+    candidate = read_report_snapshot(arguments.candidate)
+    published = read_report_snapshot(arguments.published)
+    decision = decide_publication(candidate, published)
+    append_github_outputs(arguments.github_output, decision)
+    _emit(
+        {
+            "status": "success",
+            "decision": decision.kind,
+            "has_new_data": decision.has_new_data,
+            "market_as_of": decision.candidate.market_as_of.isoformat(),
+            "published_market_as_of": decision.published.market_as_of.isoformat(),
+        },
+        json_output=arguments.json_output,
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run a command with stable, documented process exit codes."""
 
@@ -171,6 +204,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _validate(arguments)
         if arguments.command == "doctor":
             return _doctor(arguments)
+        if arguments.command == "decide-publication":
+            return _decide_publication(arguments)
         raise RuntimeError("unreachable command")
     except KeyboardInterrupt:
         raise

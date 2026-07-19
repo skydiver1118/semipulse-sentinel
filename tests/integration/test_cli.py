@@ -15,6 +15,24 @@ from semipulse_sentinel.providers.yfinance_provider import YFinanceProvider
 WATCHLIST = Path(__file__).parents[2] / "config" / "watchlist.csv"
 
 
+def _publication_report(path: Path, market_as_of: str) -> Path:
+    payload = {
+        "schema_version": "semipulse-report-v1",
+        "agent": {"name": "SemiPulse Sentinel", "slug": "semipulse-sentinel"},
+        "market_as_of": market_as_of,
+        "freshness": {"latest_market_session": market_as_of},
+        "coverage": {
+            "covered_count": 21,
+            "watchlist_count": 23,
+            "coverage_ratio": "0.9130434782608695652173913043",
+        },
+        "executive_summary": {"regime": "defensive", "confidence": "medium"},
+        "charts": [{} for _ in range(8)],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 def test_doctor_is_offline_and_reports_missing_site_as_diagnosis(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -86,6 +104,68 @@ def test_validate_missing_site_is_publication_exit_code(
 ) -> None:
     assert main(["validate", "--site", str(tmp_path / "missing"), "--json"]) == 3
     assert json.loads(capsys.readouterr().err)["category"] == "publication"
+
+
+def test_decide_publication_emits_safe_json_and_github_outputs(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    candidate = _publication_report(tmp_path / "candidate.json", "2026-07-20")
+    published = _publication_report(tmp_path / "published.json", "2026-07-17")
+    github_output = tmp_path / "github-output"
+
+    code = main(
+        [
+            "decide-publication",
+            "--candidate",
+            str(candidate),
+            "--published",
+            str(published),
+            "--github-output",
+            str(github_output),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload == {
+        "decision": "new",
+        "has_new_data": True,
+        "market_as_of": "2026-07-20",
+        "published_market_as_of": "2026-07-17",
+        "status": "success",
+    }
+    assert github_output.read_text(encoding="utf-8").splitlines()[0:2] == [
+        "decision=new",
+        "has_new_data=true",
+    ]
+
+
+def test_decide_publication_rejects_regressed_date_without_outputs(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    candidate = _publication_report(tmp_path / "candidate.json", "2026-07-16")
+    published = _publication_report(tmp_path / "published.json", "2026-07-17")
+    github_output = tmp_path / "github-output"
+
+    code = main(
+        [
+            "decide-publication",
+            "--candidate",
+            str(candidate),
+            "--published",
+            str(published),
+            "--github-output",
+            str(github_output),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().err)
+    assert code == 2
+    assert payload["category"] == "configuration"
+    assert "regressed" in payload["message"]
+    assert not github_output.exists()
 
 
 def test_unexpected_cli_error_is_sanitized(
