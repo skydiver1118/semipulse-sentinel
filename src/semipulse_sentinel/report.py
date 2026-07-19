@@ -337,6 +337,7 @@ def report_to_dict(model: ReportModel) -> dict[str, object]:
             {
                 "chart_id": chart.chart_id,
                 "title": chart.title,
+                "purpose": chart.purpose,
                 "image": safe_chart_uri(chart.image),
                 "sha256": chart.sha256,
                 "byte_length": chart.byte_length,
@@ -525,6 +526,11 @@ def _string_list(value: object, name: str, *, nonempty: bool = False) -> list[st
 
 def _nonempty_string(value: object, name: str) -> str:
     _require(isinstance(value, str) and bool(value), name)
+    return cast(str, value)
+
+
+def _nonblank_string(value: object, name: str) -> str:
+    _require(isinstance(value, str) and bool(value.strip()), name)
     return cast(str, value)
 
 
@@ -1165,6 +1171,7 @@ def validate_site(path: Path) -> SiteValidation:
     chart_keys = {
         "chart_id",
         "title",
+        "purpose",
         "image",
         "sha256",
         "byte_length",
@@ -1187,6 +1194,7 @@ def validate_site(path: Path) -> SiteValidation:
         )
         _nonempty_string(chart.get("chart_id"), "chart id")
         _nonempty_string(chart.get("title"), "chart title")
+        _nonblank_string(chart.get("purpose"), "chart purpose missing")
         try:
             image = safe_chart_uri(
                 _nonempty_string(chart.get("image"), "chart image")
@@ -1202,8 +1210,8 @@ def validate_site(path: Path) -> SiteValidation:
             "chart signal",
         )
         _string_list(chart.get("evidence"), "chart evidence", nonempty=True)
-        _nonempty_string(chart.get("interpretation"), "chart interpretation missing")
-        _nonempty_string(chart.get("trading_relevance"), "trading relevance missing")
+        _nonblank_string(chart.get("interpretation"), "chart interpretation missing")
+        _nonblank_string(chart.get("trading_relevance"), "trading relevance missing")
         _nonempty_string(chart.get("counter_signal"), "counter-signal missing")
         _string_list(chart.get("notes"), "chart notes", nonempty=True)
         _require(chart.get("has_non_color_encoding") is True, "non-color encoding")

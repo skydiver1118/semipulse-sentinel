@@ -270,6 +270,7 @@ def _report_charts(
             ReportChart(
                 chart_id=artifact.chart_id,
                 title=spec.title,
+                purpose=spec.description,
                 image=image,
                 sha256=_hash(path),
                 byte_length=path.stat().st_size,

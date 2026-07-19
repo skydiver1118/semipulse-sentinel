@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -69,6 +70,7 @@ def test_report_chart_is_immutable_and_pairs_matching_ids() -> None:
     chart = ReportChart(
         chart_id="chart-1",
         title="1. Test chart",
+        purpose="The stable purpose.",
         image="charts/chart-01.svg",
         sha256="0" * 64,
         byte_length=1,
@@ -78,10 +80,14 @@ def test_report_chart_is_immutable_and_pairs_matching_ids() -> None:
     )
 
     assert chart.insight is insight
+    assert chart.purpose == "The stable purpose."
+    with pytest.raises(ValueError, match="purpose"):
+        replace(chart, purpose="   ")
     with pytest.raises(ValueError, match="ids must match"):
         ReportChart(
             chart_id="chart-2",
             title=chart.title,
+            purpose=chart.purpose,
             image=chart.image,
             sha256=chart.sha256,
             byte_length=chart.byte_length,

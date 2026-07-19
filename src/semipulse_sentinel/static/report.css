@@ -57,7 +57,7 @@ dd { margin: .25rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
 figure { margin: 1.25rem 0; }
 figure img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--border); border-radius: .65rem; }
 figcaption { margin-top: .5rem; color: var(--muted); font-size: .82rem; }
-.chart-analysis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.chart-analysis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: .8rem; }
 .chart-analysis section { padding: .8rem 1rem; background: var(--surface-muted); border-radius: .65rem; }
 .chart-analysis h3 { margin: 0 0 .45rem; font-size: .95rem; }
 .chart-analysis p, .chart-analysis ul { margin: 0; }

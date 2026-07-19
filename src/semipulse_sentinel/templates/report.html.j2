@@ -25,7 +25,7 @@
       <div class="section-heading">
         <div>
           <p class="eyebrow">Cross-chart synthesis</p>
-          <h2 id="summary-heading">Executive summary</h2>
+          <h2 id="summary-heading">Trading decision summary</h2>
         </div>
         <div class="regime" data-regime="{{ report.executive_summary.regime }}">
           <span>{{ report.executive_summary.regime }}</span>
@@ -33,7 +33,7 @@
           <small>{{ report.executive_summary.confidence }} confidence</small>
         </div>
       </div>
-      <p class="posture"><strong>Conditional research posture:</strong> {{ report.executive_summary.posture }}</p>
+      <p class="posture"><strong>Current research posture:</strong> {{ report.executive_summary.posture }}</p>
       <div class="summary-grid">
         <section aria-labelledby="changed-heading">
           <h3 id="changed-heading">What changed</h3>
@@ -72,16 +72,20 @@
           <figcaption>Observed market data through {{ report.market_as_of }}. Non-color encodings are included for accessibility.</figcaption>
         </figure>
         <div class="chart-analysis">
+          <section aria-labelledby="{{ chart.chart_id }}-purpose">
+            <h3 id="{{ chart.chart_id }}-purpose">What this chart measures</h3>
+            <p>{{ chart.purpose }}</p>
+          </section>
           <section aria-labelledby="{{ chart.chart_id }}-evidence">
             <h3 id="{{ chart.chart_id }}-evidence">Evidence</h3>
             <ul>{% for item in chart.evidence %}<li>{{ item }}</li>{% endfor %}</ul>
           </section>
           <section aria-labelledby="{{ chart.chart_id }}-interpretation-heading">
-            <h3 id="{{ chart.chart_id }}-interpretation-heading">Interpretation</h3>
+            <h3 id="{{ chart.chart_id }}-interpretation-heading">What it means now</h3>
             <p class="chart-interpretation">{{ chart.interpretation }}</p>
           </section>
           <section aria-labelledby="{{ chart.chart_id }}-relevance">
-            <h3 id="{{ chart.chart_id }}-relevance">Conditional trading relevance</h3>
+            <h3 id="{{ chart.chart_id }}-relevance">How it may inform trading decisions</h3>
             <p>{{ chart.trading_relevance }}</p>
           </section>
           <section aria-labelledby="{{ chart.chart_id }}-counter">

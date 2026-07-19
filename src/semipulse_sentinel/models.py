@@ -143,6 +143,7 @@ class ReportChart:
 
     chart_id: str
     title: str
+    purpose: str
     image: str
     sha256: str
     byte_length: int
@@ -151,6 +152,8 @@ class ReportChart:
     insight: ChartInsight
 
     def __post_init__(self) -> None:
+        if not self.purpose.strip():
+            raise ValueError("chart purpose must not be empty")
         parsed = urlsplit(self.image)
         path = PurePosixPath(self.image)
         if (

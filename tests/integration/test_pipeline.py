@@ -212,10 +212,16 @@ def test_complete_site_uses_one_model_for_summary_and_eight_cards(
     assert html.index('id="executive-summary"') < html.index('id="chart-1"')
     assert html.count('class="chart-card"') == 8
     assert html.count('class="chart-interpretation"') == 8
+    assert len(report["charts"]) == 8
+    assert all(chart["purpose"].strip() for chart in report["charts"])
+    assert html.count("What this chart measures") == 8
+    assert html.count("What it means now") == 8
+    assert html.count("How it may inform trading decisions") == 8
+    assert "Trading decision summary" in html
     posture_start = html.index('<p class="posture">')
     posture_end = html.index("</p>", posture_start)
     assert (
-        html[posture_start:posture_end].count("Conditional research posture:")
+        html[posture_start:posture_end].count("Current research posture:")
         == 1
     )
     assert [item["chart_id"] for item in report["charts"]] == [
@@ -480,6 +486,25 @@ def test_validator_rejects_unknown_nested_report_keys(
     _write_report_and_embedded_payload(built_site, report)
 
     with pytest.raises(PublicationBlocked):
+        validate_site(built_site)
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("purpose", "chart purpose missing"),
+        ("interpretation", "chart interpretation missing"),
+        ("trading_relevance", "trading relevance missing"),
+    ],
+)
+def test_validator_rejects_blank_chart_explanations(
+    built_site: Path, field: str, message: str
+) -> None:
+    report = json.loads((built_site / "report.json").read_text(encoding="utf-8"))
+    report["charts"][0][field] = "   "
+    _write_report_and_embedded_payload(built_site, report)
+
+    with pytest.raises(PublicationBlocked, match=message):
         validate_site(built_site)
 
 
