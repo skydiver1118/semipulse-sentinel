@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SemiPulse source-chart report copied from the cited Wenxuecity post.">
+  <title>SemiPulse Sentinel - {{ report.source.title }}</title>
+  <link rel="stylesheet" href="static/source-report.css">
+</head>
+<body>
+  <header class="page-header">
+    <p class="eyebrow">SemiPulse Sentinel</p>
+    <h1>{{ report.source.title }}</h1>
+    <p class="source-badge">Copied from source - not recreated</p>
+    <dl class="metadata">
+      <div><dt>Source date</dt><dd>{{ report.market_as_of }}</dd></div>
+      <div><dt>Author</dt><dd>{{ report.source.author }}</dd></div>
+      <div><dt>Charts</dt><dd>{{ report.images|length }}</dd></div>
+      <div><dt>Source</dt><dd><a href="{{ report.source.url }}">View original post</a></dd></div>
+    </dl>
+  </header>
+
+  <main>
+    <section class="notice" aria-labelledby="copy-heading">
+      <h2 id="copy-heading">Original source images</h2>
+      <p>Each image below is copied byte-for-byte from the post in its original order. SemiPulse did not calculate, redraw, crop, relabel, or reinterpret these charts.</p>
+    </section>
+
+    <section class="chart-stack" aria-label="Charts copied from the source post">
+      {% for image in report.images %}
+      <article class="chart-card" id="source-chart-{{ '%02d'|format(image.ordinal) }}">
+        <h2>Source chart {{ image.ordinal }}</h2>
+        <a href="{{ image.source_url }}">
+          <img src="{{ image.local_path }}" alt="Source chart {{ image.ordinal }} from {{ report.source.title }}" width="{{ image.width }}" height="{{ image.height }}" loading="{% if image.ordinal == 1 %}eager{% else %}lazy{% endif %}">
+        </a>
+        <details>
+          <summary>Source-file proof</summary>
+          <dl class="proof">
+            <div><dt>SHA-256</dt><dd><code>{{ image.sha256 }}</code></dd></div>
+            <div><dt>Dimensions</dt><dd>{{ image.width }} x {{ image.height }}</dd></div>
+            <div><dt>Bytes</dt><dd>{{ image.byte_length }}</dd></div>
+          </dl>
+        </details>
+      </article>
+      {% endfor %}
+    </section>
+  </main>
+
+  <footer>
+    <p>{{ report.risk_disclosure }}</p>
+    <p>Source published {{ report.source.published_at }}{% if report.source.edited_at %}; edited {{ report.source.edited_at }}{% endif %}.</p>
+  </footer>
+</body>
+</html>
