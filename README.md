@@ -1,6 +1,6 @@
 # SemiPulse Sentinel
 
-SemiPulse Sentinel builds a deterministic nightly research report for the
+SemiPulse Sentinel builds a deterministic trading-day research report for the
 semiconductor market. It downloads daily adjusted market data, validates its
 freshness and coverage, renders exactly eight SVG charts, and publishes a
 static HTML and JSON report only after the complete site passes validation.
@@ -12,8 +12,12 @@ The public source and independently verified live endpoints are:
 - [Canonical report.json](https://skydiver1118.github.io/semipulse-sentinel/report.json)
 
 GitHub Pages is configured for the audited Actions workflow. A successful
-manual deployment has verified the HTML, JSON, and all eight chart assets;
-subsequent refreshes are requested nightly at 6:00 PM America/New_York.
+manual deployment has verified the HTML, JSON, and all eight chart assets.
+Refreshes are requested Monday through Friday at 6:00 PM America/New_York,
+but publication occurs only when the completed market session advances. If
+there is no new market data, the public page keeps the last successful report.
+After each new report deploys, an alert containing the permanent report link
+is sent to the recipient-only address `1118xmb@gmail.com`.
 
 ## What the report contains
 

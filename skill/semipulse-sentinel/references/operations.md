@@ -7,11 +7,15 @@
 - Structured report: `https://skydiver1118.github.io/semipulse-sentinel/report.json`
 - Default branch: `main`
 - Workflow: `nightly-report.yml`
-- Schedule: `0 18 * * *` in `America/New_York` (6:00 PM Eastern every
-  calendar day; GitHub Actions may start late)
+- Schedule: `0 18 * * 1-5` in `America/New_York` (6:00 PM Eastern
+  Monday through Friday; GitHub Actions may start late)
 
 The public URLs are authoritative only after a successful deployment. A fetch
 failure is an operational failure, not evidence of a neutral market regime.
+The scheduled build deploys only when the candidate `market_as_of` is later
+than the public report. If there is no new market data, deployment and email
+are skipped and the last successful report remains live. An exchange holiday
+can therefore start a weekday run without producing a new publication.
 
 ## Local discovery
 
@@ -82,6 +86,9 @@ report page and `report.json` with a cache-busting query parameter. Confirm the
 agent identity, eight chart records, expected schedule, current build metadata,
 freshness, and coverage. A failed build intentionally leaves the prior
 known-good Pages deployment live; do not imply that the old page refreshed.
+An unchanged market date also keeps that report live and sends no email. A
+newly dated deployment sends the canonical report link to the configured
+recipient-only address.
 
 Do not enable or change repository settings, lower the 70% publication gate,
 forge timestamps, modify generated files, or bypass validation merely to obtain

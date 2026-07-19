@@ -15,7 +15,7 @@ $PackageFiles = @(
 )
 $PackageDirectories = @('agents', 'references')
 # Add exact package hashes here only after a previous version has been released.
-$TrustedPriorPackageHashes = @()
+$TrustedPriorPackageHashes = @('017c615c077db7e173dbcc685aecb4e3d1b28d9f2f22ef1a25259f15b429f4f2')
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 function Get-NormalizedPackagePath {

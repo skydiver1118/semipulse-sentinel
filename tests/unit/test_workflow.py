@@ -661,6 +661,8 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
     assert "recovered_inference" in readme
     assert "docs/methodology.md" in readme
     assert "docs/operations.md" in readme
+    assert "Monday through Friday" in readme
+    assert "1118xmb@gmail.com" in readme
     assert all(spec.title in methodology for spec in CHART_SPECS)
     assert all(
         phrase in methodology_flat
@@ -694,6 +696,8 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
         phrase in operations_flat
         for phrase in (
             "6:00 PM America/New_York",
+            "Monday through Friday",
+            "0 18 * * 1-5",
             "daylight saving time",
             "22:00 UTC",
             "23:00 UTC",
@@ -703,6 +707,9 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
             "workflow_dispatch",
             "out-of-band",
             "last successful Page",
+            "no new market data",
+            "1118xmb@gmail.com",
+            "SEMIPULSE_SMTP_PASSWORD",
             "Exit code 0",
             "Exit code 2",
             "Exit code 3",

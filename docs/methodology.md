@@ -104,7 +104,7 @@ The score maps to one of five labels:
 
 The report includes supporting evidence, opposing evidence or an invalidation
 condition, and a five-session audit when enough snapshots exist. Its prose is
-template-based and deterministic; an LLM is not used to create the nightly
+template-based and deterministic; an LLM is not used to create the trading-day
 signal.
 
 ## Confidence, coverage, and publication gates
@@ -142,6 +142,14 @@ not an exchange-holiday calendar. At or after 4:15 PM
 America/New_York it expects the current weekday; before that it expects the
 previous weekday. On a weekend it expects the preceding Friday. A market
 holiday can therefore produce a conservative delay or stale indication.
+
+The hosted workflow is requested Monday through Friday at 6:00 PM
+America/New_York. That weekday cron is not an exchange-holiday calendar, so a
+holiday run may retrieve the same completed session again. Publication is
+separately gated on `market_as_of`: only a date later than the currently
+published report is deployed. An unchanged date preserves the last successful
+report and suppresses the new-report email rather than publishing blanks or
+claiming that repeated data are new.
 
 ## Data source and provenance
 
