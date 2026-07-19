@@ -7,6 +7,7 @@ from typing import ClassVar
 import pytest
 
 from semipulse_sentinel.notifications import (
+    ALERT_RECIPIENT,
     SOURCE_ALERT_RECIPIENT,
     NotificationFailed,
     ReportAlert,
@@ -74,7 +75,6 @@ def _environment() -> dict[str, str]:
         "SEMIPULSE_SMTP_USER": "sender@example.com",
         "SEMIPULSE_SMTP_PASSWORD": "app-password-secret",
         "SEMIPULSE_EMAIL_FROM": "sender@example.com",
-        "SEMIPULSE_EMAIL_TO": "1118xmb@gmail.com",
         "SEMIPULSE_MARKET_AS_OF": "2026-07-20",
         "SEMIPULSE_REGIME": "defensive",
         "SEMIPULSE_CONFIDENCE": "medium",
@@ -100,6 +100,11 @@ def test_send_report_alert_uses_starttls_and_contains_the_report_link() -> None:
     message = FakeSMTP.instance.message
     assert message is not None
     assert message["To"] == "1118xmb@gmail.com"
+    payload = message.as_string()
+    assert "View report:" in payload
+    assert "Source post" not in payload
+    assert "author" not in payload.lower()
+    assert "\u4e91\u8d77\u5343\u767e\u5ea6" not in payload
     assert "2026-07-20" in str(message["Subject"])
     plain = message.get_body(preferencelist=("plain",))
     html = message.get_body(preferencelist=("html",))
@@ -110,13 +115,15 @@ def test_send_report_alert_uses_starttls_and_contains_the_report_link() -> None:
 
 
 def test_settings_and_alert_load_from_environment() -> None:
-    environment: Mapping[str, str] = _environment()
+    environment: Mapping[str, str] = _environment() | {
+        "SEMIPULSE_EMAIL_TO": "attacker@example.com"
+    }
 
     settings = SmtpSettings.from_environment(environment)
     alert = ReportAlert.from_environment(environment)
 
     assert settings.port == 587
-    assert settings.recipient == "1118xmb@gmail.com"
+    assert settings.recipient == ALERT_RECIPIENT == "1118xmb@gmail.com"
     assert "app-password-secret" not in repr(settings)
     assert alert == _alert()
 
@@ -134,7 +141,9 @@ def test_settings_reject_missing_or_header_injection() -> None:
     missing = _environment()
     del missing["SEMIPULSE_SMTP_PASSWORD"]
     injected = _environment()
-    injected["SEMIPULSE_EMAIL_TO"] = "victim@example.com\nBcc: attacker@example.com"
+    injected["SEMIPULSE_EMAIL_FROM"] = (
+        "victim@example.com\nBcc: attacker@example.com"
+    )
 
     with pytest.raises(ValueError, match="SEMIPULSE_SMTP_PASSWORD"):
         SmtpSettings.from_environment(missing)

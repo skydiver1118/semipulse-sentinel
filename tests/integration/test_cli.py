@@ -63,7 +63,6 @@ def _notification_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "SEMIPULSE_SMTP_USER": "sender@example.com",
         "SEMIPULSE_SMTP_PASSWORD": "secret-app-password",
         "SEMIPULSE_EMAIL_FROM": "sender@example.com",
-        "SEMIPULSE_EMAIL_TO": "1118xmb@gmail.com",
         "SEMIPULSE_MARKET_AS_OF": "2026-07-20",
         "SEMIPULSE_REGIME": "defensive",
         "SEMIPULSE_CONFIDENCE": "medium",

@@ -14,7 +14,8 @@ from urllib.parse import urlsplit
 
 _REGIMES = {"risk-on", "constructive", "mixed", "defensive", "risk-off"}
 _CONFIDENCE = {"high", "medium", "low"}
-SOURCE_ALERT_RECIPIENT = "1118xmb@gmail.com"
+ALERT_RECIPIENT = "1118xmb@gmail.com"
+SOURCE_ALERT_RECIPIENT = ALERT_RECIPIENT
 
 
 class NotificationFailed(RuntimeError):
@@ -92,7 +93,7 @@ class SmtpSettings:
                 environment, "SEMIPULSE_SMTP_PASSWORD", strip=False
             ),
             sender=_required(environment, "SEMIPULSE_EMAIL_FROM"),
-            recipient=_required(environment, "SEMIPULSE_EMAIL_TO"),
+            recipient=ALERT_RECIPIENT,
         )
 
     @classmethod
@@ -243,7 +244,8 @@ def build_message(settings: SmtpSettings, alert: ReportAlert) -> EmailMessage:
         f"Confidence: {alert.confidence}\n"
         f"Coverage: {alert.coverage}\n\n"
         f"View report: {alert.dashboard_url}\n\n"
-        "Research only — not individualized investment advice.\n"
+        "Research only — not individualized investment advice.\n",
+        cte="quoted-printable",
     )
     url = escape(alert.dashboard_url, quote=True)
     message.add_alternative(
