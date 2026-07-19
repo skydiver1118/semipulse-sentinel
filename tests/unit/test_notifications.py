@@ -100,17 +100,19 @@ def test_send_report_alert_uses_starttls_and_contains_the_report_link() -> None:
     message = FakeSMTP.instance.message
     assert message is not None
     assert message["To"] == "1118xmb@gmail.com"
-    payload = message.as_string()
-    assert "View report:" in payload
-    assert "Source post" not in payload
-    assert "author" not in payload.lower()
-    assert "\u4e91\u8d77\u5343\u767e\u5ea6" not in payload
     assert "2026-07-20" in str(message["Subject"])
     plain = message.get_body(preferencelist=("plain",))
     html = message.get_body(preferencelist=("html",))
     assert plain is not None and html is not None
-    assert _alert().dashboard_url in plain.get_content()
-    assert _alert().dashboard_url in html.get_content()
+    plain_body = plain.get_content()
+    html_body = html.get_content()
+    assert "View report:" in plain_body
+    assert "View the SemiPulse Sentinel report" in html_body
+    for body in (plain_body, html_body):
+        assert _alert().dashboard_url in body
+        assert "Source post" not in body
+        assert "author" not in body.lower()
+        assert "\u4e91\u8d77\u5343\u767e\u5ea6" not in body
     assert "app-password-secret" not in str(result)
 
 

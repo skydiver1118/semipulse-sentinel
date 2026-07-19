@@ -244,8 +244,7 @@ def build_message(settings: SmtpSettings, alert: ReportAlert) -> EmailMessage:
         f"Confidence: {alert.confidence}\n"
         f"Coverage: {alert.coverage}\n\n"
         f"View report: {alert.dashboard_url}\n\n"
-        "Research only — not individualized investment advice.\n",
-        cte="quoted-printable",
+        "Research only — not individualized investment advice.\n"
     )
     url = escape(alert.dashboard_url, quote=True)
     message.add_alternative(
