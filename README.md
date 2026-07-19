@@ -1,80 +1,53 @@
 # SemiPulse Sentinel
 
-SemiPulse Sentinel builds a deterministic trading-day research report for the
-semiconductor market. It downloads daily adjusted market data, validates its
-freshness and coverage, renders exactly eight SVG charts, and publishes a
-static HTML and JSON report only after the complete site passes validation.
+SemiPulse Sentinel publishes the original semiconductor chart images embedded
+in a qualifying Wenxuecity post. The images are copied byte-for-byte, kept in
+source order, and accompanied by provenance and SHA-256 hashes. The scanner
+does not redraw the charts or substitute finance-provider data.
 
-The public source and independently verified live endpoints are:
+Canonical interfaces:
 
 - [GitHub repository](https://github.com/skydiver1118/semipulse-sentinel)
 - [SemiPulse Sentinel report](https://skydiver1118.github.io/semipulse-sentinel/)
 - [Canonical report.json](https://skydiver1118.github.io/semipulse-sentinel/report.json)
+- [Seed source post](https://bbs.wenxuecity.com/cfzh/97669.html)
 
-GitHub Pages is configured for the audited Actions workflow. A successful
-manual deployment has verified the HTML, JSON, and all eight chart assets.
-Refreshes are requested Monday through Friday at 6:00 PM America/New_York,
-but publication occurs only when the completed market session advances. If
-there is no new market data, the public page keeps the last successful report.
-After each new report deploys, an alert containing the permanent report link
-is sent with `1118xmb@gmail.com` as the sole recipient.
+The hosted scanner starts Monday through Friday at 6:20 PM
+America/New_York. An XNYS calendar gate permits automatic source checks only
+after a completed trading session. It checks the seed post for edits and a
+bounded set of the author’s newest top-level semiconductor posts.
 
-## What the report contains
-
-The report pairs each chart with an observation-led interpretation and then
-combines 30 fixed scoring inputs into a five-pillar regime. The eight charts
-cover:
-
-1. semiconductor-complex performance;
-2. relative strength versus QQQ;
-3. watchlist breadth;
-4. equal-weight participation;
-5. momentum leaders and laggards;
-6. a multi-horizon trend heatmap;
-7. volatility and distance from the recent peak; and
-8. a return, volatility, and liquidity risk/reward map.
-
-The input watchlist is replaceable without changing code. Its current rows are
-labeled `source_status=recovered_inference` because the identity of the
-original upload could not be verified. The recovered `Last` and `Chg%` values
-are retained only as provenance and are never used as current market data.
-
-See [docs/methodology.md](docs/methodology.md) for chart calculations,
-composite scoring, freshness, coverage, and provider limitations. See
-[docs/operations.md](docs/operations.md) for scheduling, local verification,
-manual runs, Pages setup, and recovery.
+Only a newer qualifying post or a changed ordered image manifest deploys. If
+there is no new source data, the public page keeps the last successful report
+and no email is sent. After a changed report deploys successfully, one alert
+with the permanent report link goes to the hard-locked recipient
+`1118xmb@gmail.com`.
 
 ## Local verification
 
-Python 3.11 or later is required. From the repository root:
+Python 3.11 or later is required:
 
 ```powershell
 python -m pip install --require-hashes -r requirements.lock
 python -m pip install --no-deps --no-build-isolation .
+python scripts/verify_workflow.py .github/workflows/nightly-report.yml
 python -m pytest -q
-python -m semipulse_sentinel doctor --watchlist config/watchlist.csv --site site --json
+python -m semipulse_sentinel build-source --output site --json
+python -m semipulse_sentinel validate-source --site site --json
 ```
 
-The tests and `doctor` command are offline. A report build is the deliberate
-network boundary because it retrieves market data from the configured
-provider:
-
-```powershell
-python -m semipulse_sentinel build --watchlist config/watchlist.csv --output site --json
-python -m semipulse_sentinel validate --site site --json
-```
-
-Successful publication is failure-atomic: the new site is built and validated
-in a staging directory, then replaces the destination. A failed build or
-validation does not replace the prior valid site.
+The source build is failure-atomic: download and validation complete in a
+staging directory before replacing the requested destination. See
+[docs/methodology.md](docs/methodology.md) for source selection and integrity
+rules and [docs/operations.md](docs/operations.md) for scheduling, manual
+refreshes, email, and recovery.
 
 ## Research boundary
 
 Research only - not individualized investment advice or a recommendation to
-buy or sell. Market data may be delayed, incomplete, or revised. Leveraged
-ETFs such as SOXL can suffer path-dependent decay and large losses. Verify
-prices and signals with a licensed source before trading. SemiPulse Sentinel
-does not place orders, optimize a portfolio, or provide personalized sizing.
+buy or sell. The report preserves third-party source images and provenance; it
+does not calculate signals, place orders, promise returns, or provide
+personalized sizing. Source material may be delayed, incomplete, or revised.
 
 ## License
 

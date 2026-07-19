@@ -5,98 +5,58 @@
 - Repository: `https://github.com/skydiver1118/semipulse-sentinel`
 - Report: `https://skydiver1118.github.io/semipulse-sentinel/`
 - Structured report: `https://skydiver1118.github.io/semipulse-sentinel/report.json`
+- Source post: `https://bbs.wenxuecity.com/cfzh/97669.html`
 - Default branch: `main`
 - Workflow: `nightly-report.yml`
-- Schedule: `0 18 * * 1-5` in `America/New_York` (6:00 PM Eastern
-  Monday through Friday; GitHub Actions may start late)
+- Schedule: `20 18 * * 1-5` in `America/New_York` (6:20 PM Eastern,
+  Monday through Friday)
 
-The public URLs are authoritative only after a successful deployment. A fetch
-failure is an operational failure, not evidence of a neutral market regime.
-The scheduled build deploys only when the candidate `market_as_of` is later
-than the public report. If there is no new market data, deployment and email
-are skipped and the last successful report remains live. An exchange holiday
-can therefore start a weekday run without producing a new publication.
+Automatic runs use an XNYS `check-market-session` gate. Manual
+`workflow_dispatch` is the explicit recovery path. The source sequence is
+`build-source`, `validate-source`, `decide-source-publication`, Pages deploy,
+then `notify-source`.
 
-## Local discovery
+## Source report fields
 
-Run from the repository root:
+Require `semipulse-wenxuecity-source-v1`. Read:
 
-```powershell
-python -m semipulse_sentinel doctor --json
-python -m semipulse_sentinel validate --site site --json
-```
+- `market_as_of`;
+- `source.post_id`, `source.published_at`, `source.edited_at`, `source.url`,
+  author, title, and `copied_unchanged`;
+- `images[]`: ordinal, `local_path`, `source_url`, `resolved_url`, content type,
+  dimensions, `byte_length`, and `sha256`;
+- `risk_disclosure`.
 
-`doctor` is offline. Inspect its `site_state`, dependency versions, watchlist
-count and source-status counts, and schedule. Read `site/report.json` only when
-the site exists and validation succeeds. If no local repository is available,
-fetch the canonical structured-report URL directly and require HTTP 200 and
-valid JSON.
-
-## Report fields
-
-Use the JSON fields directly:
-
-- `market_as_of` is the market date; never substitute file mtime or fetch time.
-- `freshness.state`, `freshness.expected_market_session`,
-  `freshness.latest_market_session`, `freshness.expected_session_lag`, and
-  `freshness.evaluated_at` record freshness when the report was built. At query time,
-  compare `latest_market_session` with the expected completed session in
-  `America/New_York`: use the previous weekday on weekends and before 16:15 ET,
-  otherwise use the current weekday. Count intervening weekdays. Reclassify as
-  current for zero lag and at most three calendar days of age, delayed for at
-  most one-session lag and three calendar days, and stale otherwise. This
-  heuristic has no exchange-holiday calendar, so disclose holiday uncertainty.
-- `coverage.covered_count`, `coverage.watchlist_count`, and
-  `coverage.coverage_ratio` quantify usable watchlist coverage. Also disclose
-  exclusions, `coverage.missing_required`, `coverage.missing_optional`, and
-  warnings when material. A ratio below 0.70 or any `missing_required` makes the
-  report unpublishable and uninterpretable. Coverage from 70% to below 90% is
-  partial and caps confidence at medium, even when the data are fresh.
-- `executive_summary.regime`, `executive_summary.confidence`, and
-  `executive_summary.score` state the deterministic composite result.
-- `executive_summary.supports`, `executive_summary.challenges`,
-  `executive_summary.what_changed`, and
-  `executive_summary.what_would_change_the_view` provide balanced evidence.
-- Each `charts[]` item stores flattened `headline`, `signal`, `evidence`,
-  `interpretation`, `trading_relevance`, `counter_signal`, and `notes` fields;
-  summarize those fields rather than inferring meaning from SVG pixels.
-- Always preserve `limitations`, `risk_warning`, and provenance. The recovered
-  watchlist is labeled `recovered_inference`; its original upload identity is
-  not verified.
-
-A useful summary reports, in order: market date; freshness; coverage; regime
-and confidence; strongest support; strongest challenge; what changed or would
-change the view; exclusions/limitations; and the canonical report link.
+The scanner checks the seed and at most five newest top-level posts by the
+exact author. Candidates require semiconductor markers and 1-12 allowlisted
+images. Assets are copied byte-for-byte; do not derive replacement charts.
 
 ## Authorized refresh
 
-Only dispatch when the user explicitly requests a refresh or has already given
-that authority in the active conversation. Honor attached conditions. For a
-conditional request such as "refresh if stale," first establish that condition
-from valid report JSON; missing, invalid, or unreachable JSON is an operational
-failure, not evidence of staleness:
+Only dispatch with explicit authority in the active conversation:
 
 ```powershell
 gh workflow run nightly-report.yml --repo skydiver1118/semipulse-sentinel --ref main
 gh run list --repo skydiver1118/semipulse-sentinel --workflow nightly-report.yml --limit 5
 ```
 
-Monitor the selected run through completion. After success, fetch both the
-report page and `report.json` with a cache-busting query parameter. Confirm the
-agent identity, eight chart records, expected schedule, current build metadata,
-freshness, and coverage. A failed build intentionally leaves the prior
-known-good Pages deployment live; do not imply that the old page refreshed.
-An unchanged market date also keeps that report live and sends no email. A
-newly dated deployment sends the canonical report link to the configured
-recipient-only address.
+Monitor the selected run. After success, fetch HTML, JSON, and every local
+image with cache busting. Confirm source identity, count, and ordered hashes.
+If there is no new source data, the deploy and email jobs are skipped and the
+last successful report stays live. A changed deployment sends one report link
+to `1118xmb@gmail.com`.
 
-Do not enable or change repository settings, lower the 70% publication gate,
-forge timestamps, modify generated files, or bypass validation merely to obtain
-a green run. Escalate provider, permission, or Pages failures as operational
-limitations.
+## Local verification
+
+```powershell
+python -m semipulse_sentinel build-source --output site --json
+python -m semipulse_sentinel validate-source --site site --json
+```
+
+Do not change repository settings, weaken validation, edit generated output,
+or expose SMTP credentials. Treat failures as operational limitations.
 
 ## Research boundary
 
-SemiPulse Sentinel is research-only decision support. It does not place orders,
-connect to brokerage accounts, promise returns, or give individualized
-financial advice. Report opposing evidence and confidence caps prominently.
+SemiPulse Sentinel is research-only. It does not place orders, connect to
+brokerage accounts, promise returns, or provide individualized advice.

@@ -15,8 +15,8 @@ EXPECTED_SKILL_FILES = {
     "references/operations.md",
 }
 EXPECTED_DESCRIPTION = (
-    "Use when a user asks for SemiPulse, a semi monitor, the semiconductor "
-    "nightly report, a refresh of the eight charts, or interpretation of the "
+    "Use when a user asks for SemiPulse, the semiconductor source-chart "
+    "report, a Wenxuecity chart refresh, the eight copied charts, or the "
     "semiconductor dashboard."
 )
 
@@ -46,7 +46,7 @@ def test_skill_frontmatter_and_body_are_thin_and_named() -> None:
     assert data.count("\n---\n") == 1
     assert len(data.split()) < 500
     assert "SemiPulse Sentinel" in data
-    assert "python -m semipulse_sentinel doctor --json" in data
+    assert "python -m semipulse_sentinel validate-source" in data
     assert "report.json" in data
     assert "gh workflow run nightly-report.yml" in data
 
@@ -55,19 +55,21 @@ def test_skill_guidance_is_fail_closed_and_research_only() -> None:
     data = _read("skill/semipulse-sentinel/SKILL.md")
     required = (
         "market_as_of",
-        "freshness",
-        "coverage",
-        "regime",
-        "confidence",
-        "supports",
-        "challenges",
-        "limitations",
-        "Never infer chart meaning from SVG pixels",
+        "semipulse-wenxuecity-source-v1",
+        "source.post_id",
+        "source.url",
+        "source.published_at",
+        "source.edited_at",
+        "images[]",
+        "sha256",
+        "copied_unchanged",
+        "risk_disclosure",
+        "Do not recreate",
         "Do not dispatch unless",
         "Honor conditions attached to refresh authority",
-        "not proof of staleness",
-        "Keep freshness and coverage separate",
-        "Never describe stale data as current or partial coverage as broad or complete",
+        "not proof of new source data",
+        "last successful report",
+        "sends no email",
         "research only",
         "Never place orders",
     )
@@ -81,42 +83,41 @@ def test_operations_reference_has_canonical_interfaces() -> None:
         "https://github.com/skydiver1118/semipulse-sentinel",
         "https://skydiver1118.github.io/semipulse-sentinel/",
         "https://skydiver1118.github.io/semipulse-sentinel/report.json",
-        "python -m semipulse_sentinel doctor --json",
+        "python -m semipulse_sentinel validate-source",
         "gh workflow run nightly-report.yml --repo skydiver1118/semipulse-sentinel",
         "gh run list --repo skydiver1118/semipulse-sentinel",
         "main",
-        "0 18 * * 1-5",
+        "20 18 * * 1-5",
         "America/New_York",
         "Monday through Friday",
-        "no new market data",
+        "no new source data",
         "last successful",
         "email",
+        "1118xmb@gmail.com",
         "market_as_of",
-        "freshness.state",
-        "freshness.evaluated_at",
-        "coverage.coverage_ratio",
-        "coverage.missing_required",
-        "executive_summary.regime",
-        "executive_summary.confidence",
-        "executive_summary.supports",
-        "executive_summary.challenges",
-        "executive_summary.what_would_change_the_view",
-        "charts[]",
-        "flattened",
-        "query time",
-        "16:15",
-        "previous weekday",
-        "exchange-holiday calendar",
-        "below 0.70",
-        "unpublishable",
-        "70% to below 90%",
-        "limitations",
-        "risk_warning",
+        "semipulse-wenxuecity-source-v1",
+        "source.post_id",
+        "source.published_at",
+        "source.edited_at",
+        "source.url",
+        "images[]",
+        "local_path",
+        "source_url",
+        "resolved_url",
+        "sha256",
+        "byte_length",
+        "check-market-session",
+        "build-source",
+        "decide-source-publication",
+        "notify-source",
+        "XNYS",
+        "byte-for-byte",
+        "risk_disclosure",
     )
     for phrase in required:
         assert phrase in data
-    assert "executive_summary.change_triggers" not in data
-    assert "charts[].insight" not in data
+    assert "yfinance" not in data
+    assert "reconstruct" not in data.casefold()
 
 
 def test_openai_interface_is_exact_and_uses_skill_token() -> None:
@@ -125,10 +126,10 @@ def test_openai_interface_is_exact_and_uses_skill_token() -> None:
     assert parsed == {
         "interface": {
             "display_name": "SemiPulse Sentinel",
-            "short_description": "Inspect nightly semiconductor market reports",
+            "short_description": "Review semiconductor source-chart reports",
             "default_prompt": (
-                "Use $semipulse-sentinel to summarize the latest semiconductor "
-                "report and assess whether it needs a refresh."
+                "Use $semipulse-sentinel to review the latest copied source charts "
+                "and assess whether the source scanner needs a refresh."
             ),
         }
     }

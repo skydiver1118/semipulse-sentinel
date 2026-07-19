@@ -13,8 +13,6 @@ from typing import Any, cast
 import pytest
 import yaml
 
-from semipulse_sentinel.charts import CHART_SPECS
-
 WORKFLOW = Path(".github/workflows/nightly-report.yml")
 VERIFIER = Path("scripts/verify_workflow.py")
 EXPECTED_ACTIONS = (
@@ -688,63 +686,57 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
     assert "skydiver1118/semipulse-sentinel" in readme
     assert "https://skydiver1118.github.io/semipulse-sentinel/" in readme
     assert "https://skydiver1118.github.io/semipulse-sentinel/report.json" in readme
-    assert "recovered_inference" in readme
+    assert "copied byte-for-byte" in readme
     assert "docs/methodology.md" in readme
     assert "docs/operations.md" in readme
     assert "Monday through Friday" in readme
     assert "1118xmb@gmail.com" in readme
-    assert all(spec.title in methodology for spec in CHART_SPECS)
     assert all(
         phrase in methodology_flat
         for phrase in (
-            "absolute trend: 25%",
-            "relative leadership: 20%",
-            "breadth and participation: 25%",
-            "momentum distribution: 15%",
-            "volatility/drawdown risk: 15%",
-            "2 * vote sum / fixed input count",
-            "absolute trend: 25% (6 inputs)",
-            "relative leadership: 20% (8 inputs)",
-            "breadth and participation: 25% (8 inputs)",
-            "momentum distribution: 15% (4 inputs)",
-            "volatility/drawdown risk: 15% (4 inputs)",
-            "no duplicate symbol/date rows",
-            "exactly eight validated artifacts",
-            "three attempts",
-            "63-session return horizon (64 common observations)",
-            "expected-session lag is unknown or greater than one",
-            "current",
-            "delayed",
-            "stale",
-            "70%",
-            "yfinance==1.5.1",
+            "semipulse-wenxuecity-source-v1",
+            "https://bbs.wenxuecity.com/cfzh/97669.html",
+            "byte-for-byte",
+            "ordered SHA-256",
+            "exact author",
+            "semiconductor markers",
+            "at most five",
+            "1 to 12",
+            "8 MiB",
+            "source post ID",
+            "publication date",
+            "image manifest changes",
+            "no newer or revised source",
             "Research only",
-            "personalized sizing",
+            "does not calculate",
         )
     )
     assert all(
         phrase in operations_flat
         for phrase in (
-            "6:00 PM America/New_York",
+            "6:20 PM America/New_York",
             "Monday through Friday",
-            "0 18 * * 1-5",
+            "20 18 * * 1-5",
             "daylight saving time",
-            "22:00 UTC",
-            "23:00 UTC",
             "best effort",
             "60 days",
             "gh workflow enable nightly-report.yml",
             "workflow_dispatch",
             "out-of-band",
             "last successful Page",
-            "no new market data",
+            "no new source data",
             "1118xmb@gmail.com",
             "SEMIPULSE_SMTP_PASSWORD",
+            "check-market-session",
+            "build-source",
+            "validate-source",
+            "decide-source-publication",
+            "notify-source",
             "Exit code 0",
             "Exit code 2",
             "Exit code 3",
             "Exit code 4",
-            "No secrets",
+            "No credentials",
         )
     )
     assert "forks" in operations_flat.casefold()
