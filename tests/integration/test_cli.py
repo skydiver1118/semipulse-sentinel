@@ -151,8 +151,8 @@ def test_validate_missing_site_is_publication_exit_code(
 def test_decide_publication_emits_safe_json_and_github_outputs(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    candidate = _publication_report(tmp_path / "candidate.json", "2026-07-20")
-    published = _publication_report(tmp_path / "published.json", "2026-07-17")
+    candidate = _publication_report(tmp_path / "candidate.json", "2026-07-17")
+    published = _source_publication_report(tmp_path / "published.json")
     github_output = tmp_path / "github-output"
 
     code = main(
@@ -171,14 +171,14 @@ def test_decide_publication_emits_safe_json_and_github_outputs(
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
     assert payload == {
-        "decision": "new",
+        "decision": "migration",
         "has_new_data": True,
-        "market_as_of": "2026-07-20",
+        "market_as_of": "2026-07-17",
         "published_market_as_of": "2026-07-17",
         "status": "success",
     }
     assert github_output.read_text(encoding="utf-8").splitlines()[0:2] == [
-        "decision=new",
+        "decision=migration",
         "has_new_data=true",
     ]
 

@@ -8,13 +8,18 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, TypeAlias, cast
 
 from semipulse_sentinel.contracts import (
     AGENT_NAME,
     AGENT_SLUG,
     REPORT_SCHEMA_VERSION,
 )
+from semipulse_sentinel.source_publication import (
+    SourcePublicationSnapshot,
+    read_source_publication_snapshot,
+)
+from semipulse_sentinel.source_report import SOURCE_REPORT_SCHEMA
 
 _REGIMES = {"risk-on", "constructive", "mixed", "defensive", "risk-off"}
 _CONFIDENCE = {"high", "medium", "low"}
@@ -39,19 +44,22 @@ class ReportSnapshot:
         return f"{self.covered_count}/{self.watchlist_count} ({percent:.1f}%)"
 
 
+PublishedReportSnapshot: TypeAlias = ReportSnapshot | SourcePublicationSnapshot
+
+
 @dataclass(frozen=True, slots=True)
 class PublicationDecision:
     """Whether one validated candidate advances the published market date."""
 
-    kind: Literal["new", "unchanged"]
+    kind: Literal["new", "migration", "unchanged"]
     candidate: ReportSnapshot
-    published: ReportSnapshot
+    published: PublishedReportSnapshot
 
     @property
     def has_new_data(self) -> bool:
         """Return whether deployment and notification may proceed."""
 
-        return self.kind == "new"
+        return self.kind != "unchanged"
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:
@@ -155,8 +163,27 @@ def read_report_snapshot(path: Path) -> ReportSnapshot:
     )
 
 
+def read_published_report_snapshot(path: Path) -> PublishedReportSnapshot:
+    """Read one strict daily or exact source-schema published snapshot."""
+
+    report_path = Path(path)
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"report JSON is unreadable: {report_path}") from error
+    report = _mapping(payload, "report")
+    schema = report.get("schema_version")
+    if schema == REPORT_SCHEMA_VERSION:
+        return read_report_snapshot(report_path)
+    if schema == SOURCE_REPORT_SCHEMA:
+        return read_source_publication_snapshot(
+            report_path, require_source=True
+        )
+    raise ValueError("published report schema version is invalid")
+
+
 def decide_publication(
-    candidate: ReportSnapshot, published: ReportSnapshot
+    candidate: ReportSnapshot, published: PublishedReportSnapshot
 ) -> PublicationDecision:
     """Return a deployment decision or reject a regressed market date."""
 
@@ -166,9 +193,13 @@ def decide_publication(
             f"{published.market_as_of.isoformat()} to "
             f"{candidate.market_as_of.isoformat()}"
         )
-    kind: Literal["new", "unchanged"] = (
-        "new" if candidate.market_as_of > published.market_as_of else "unchanged"
-    )
+    if isinstance(published, SourcePublicationSnapshot):
+        if not published.is_source_report:
+            raise ValueError("published source snapshot schema is invalid")
+        return PublicationDecision("migration", candidate, published)
+    kind: Literal["new", "unchanged"] = "unchanged"
+    if candidate.market_as_of > published.market_as_of:
+        kind = "new"
     return PublicationDecision(kind, candidate, published)
 
 

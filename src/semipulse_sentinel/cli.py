@@ -225,11 +225,12 @@ def _decide_publication(arguments: argparse.Namespace) -> int:
     from semipulse_sentinel.publication import (
         append_github_outputs,
         decide_publication,
+        read_published_report_snapshot,
         read_report_snapshot,
     )
 
     candidate = read_report_snapshot(arguments.candidate)
-    published = read_report_snapshot(arguments.published)
+    published = read_published_report_snapshot(arguments.published)
     decision = decide_publication(candidate, published)
     append_github_outputs(arguments.github_output, decision)
     _emit(
