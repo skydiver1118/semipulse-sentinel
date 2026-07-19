@@ -65,13 +65,12 @@ EXPECTED_RUNS = {
         "python -m semipulse_sentinel check-market-session "
         '--github-output "$GITHUB_OUTPUT" --json'
     ),
-    "Build source report": (
-        "python -m semipulse_sentinel build-source "
+    "Build report": (
+        "python -m semipulse_sentinel build --watchlist config/watchlist.csv "
         "--output candidate-site --json"
     ),
-    "Validate source site": (
-        "python -m semipulse_sentinel validate-source "
-        "--site candidate-site --json"
+    "Validate site": (
+        "python -m semipulse_sentinel validate --site candidate-site --json"
     ),
     "Fetch published report": (
         "curl --fail --show-error --silent --location --retry 3 "
@@ -79,8 +78,8 @@ EXPECTED_RUNS = {
         '"https://skydiver1118.github.io/semipulse-sentinel/'
         'report.json?run_id=${GITHUB_RUN_ID}"'
     ),
-    "Decide source publication": (
-        "python -m semipulse_sentinel decide-source-publication "
+    "Decide publication": (
+        "python -m semipulse_sentinel decide-publication "
         "--candidate candidate-site/report.json "
         "--published published-report.json "
         '--github-output "$GITHUB_OUTPUT" --json'
@@ -151,12 +150,13 @@ def _mutation_build_before_test(text: str) -> str:
         "          --github-output \"$GITHUB_OUTPUT\" --json"
     )
     build = (
-        "      - name: Build source report\n"
+        "      - name: Build report\n"
         "        if: >-\n"
         "          steps.session.outputs.should_run == 'true' ||\n"
         "          github.event_name == 'workflow_dispatch'\n"
         "        run: >-\n"
-        "          python -m semipulse_sentinel build-source\n"
+        "          python -m semipulse_sentinel build --watchlist "
+        "config/watchlist.csv\n"
         "          --output candidate-site --json"
     )
     return _replace_once(
@@ -164,6 +164,25 @@ def _mutation_build_before_test(text: str) -> str:
         f"{tests}\n\n{session}\n\n{build}",
         f"{session}\n\n{build}\n\n{tests}",
     )
+
+
+def _mutation_reordered_jobs(text: str) -> str:
+    deploy_index = text.index("\n  deploy:\n")
+    notify_index = text.index("\n  notify:\n")
+    return (
+        text[:deploy_index]
+        + text[notify_index:]
+        + text[deploy_index:notify_index]
+    )
+
+
+def _mutation_missing_session_gate(text: str) -> str:
+    gate = (
+        "        if: >-\n"
+        "          steps.session.outputs.should_run == 'true' ||\n"
+        "          github.event_name == 'workflow_dispatch'\n"
+    )
+    return _replace_first(text, gate, "")
 
 
 def _mutation_configure_enablement(text: str) -> str:
@@ -344,6 +363,7 @@ def test_workflow_has_exact_top_level_contract() -> None:
         "PYTHONHASHSEED": "0",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "PIP_NO_INPUT": "1",
+        "MPLBACKEND": "Agg",
         "TZ": "America/New_York",
     }
 
@@ -368,9 +388,9 @@ def test_jobs_have_exact_runners_timeouts_permissions_and_deploy_gate() -> None:
     assert build["outputs"] == {
         "has_new_data": "${{ steps.publication.outputs.has_new_data }}",
         "market_as_of": "${{ steps.publication.outputs.market_as_of }}",
-        "source_post_id": "${{ steps.publication.outputs.source_post_id }}",
-        "source_title": "${{ steps.publication.outputs.source_title }}",
-        "image_count": "${{ steps.publication.outputs.image_count }}",
+        "regime": "${{ steps.publication.outputs.regime }}",
+        "confidence": "${{ steps.publication.outputs.confidence }}",
+        "coverage": "${{ steps.publication.outputs.coverage }}",
     }
     assert set(deploy) == {
         "needs",
@@ -412,10 +432,10 @@ def test_build_steps_have_exact_order_commands_and_artifact() -> None:
         "Verify workflow",
         "Run offline tests",
         "Check market session",
-        "Build source report",
-        "Validate source site",
+        "Build report",
+        "Validate site",
         "Fetch published report",
-        "Decide source publication",
+        "Decide publication",
         "Configure Pages",
         "Upload Pages artifact",
     ]
@@ -432,12 +452,12 @@ def test_build_steps_have_exact_order_commands_and_artifact() -> None:
         "retention-days": 1,
     }
     assert _step(steps, "Check market session")["id"] == "session"
-    assert _step(steps, "Decide source publication")["id"] == "publication"
+    assert _step(steps, "Decide publication")["id"] == "publication"
     for name in (
-        "Build source report",
-        "Validate source site",
+        "Build report",
+        "Validate site",
         "Fetch published report",
-        "Decide source publication",
+        "Decide publication",
     ):
         assert _step(steps, name)["if"] == (
             "steps.session.outputs.should_run == 'true' || "
@@ -480,7 +500,7 @@ def test_deploy_has_one_exact_deployment_step() -> None:
     ]
 
 
-def test_notify_job_has_exact_source_setup_and_secret_boundary() -> None:
+def test_notify_job_has_exact_daily_setup_and_secret_boundary() -> None:
     steps = _load_workflow()["jobs"]["notify"]["steps"]
 
     assert [item["name"] for item in steps] == [
@@ -491,7 +511,7 @@ def test_notify_job_has_exact_source_setup_and_secret_boundary() -> None:
     assert steps[0]["with"] == {"persist-credentials": False}
     assert steps[1]["with"] == {"python-version": "3.11.15"}
     send = steps[2]
-    assert send["run"] == "python -m semipulse_sentinel notify-source --json"
+    assert send["run"] == "python -m semipulse_sentinel notify --json"
     assert send["env"] == {
         "SEMIPULSE_SMTP_HOST": "${{ secrets.SEMIPULSE_SMTP_HOST }}",
         "SEMIPULSE_SMTP_PORT": "${{ secrets.SEMIPULSE_SMTP_PORT }}",
@@ -499,9 +519,9 @@ def test_notify_job_has_exact_source_setup_and_secret_boundary() -> None:
         "SEMIPULSE_SMTP_PASSWORD": "${{ secrets.SEMIPULSE_SMTP_PASSWORD }}",
         "SEMIPULSE_EMAIL_FROM": "${{ secrets.SEMIPULSE_EMAIL_FROM }}",
         "SEMIPULSE_MARKET_AS_OF": "${{ needs.build.outputs.market_as_of }}",
-        "SEMIPULSE_SOURCE_POST_ID": "${{ needs.build.outputs.source_post_id }}",
-        "SEMIPULSE_SOURCE_TITLE": "${{ needs.build.outputs.source_title }}",
-        "SEMIPULSE_IMAGE_COUNT": "${{ needs.build.outputs.image_count }}",
+        "SEMIPULSE_REGIME": "${{ needs.build.outputs.regime }}",
+        "SEMIPULSE_CONFIDENCE": "${{ needs.build.outputs.confidence }}",
+        "SEMIPULSE_COVERAGE": "${{ needs.build.outputs.coverage }}",
         "SEMIPULSE_DASHBOARD_URL": (
             "https://skydiver1118.github.io/semipulse-sentinel/"
         ),
@@ -514,7 +534,7 @@ def test_workflow_contains_only_notification_secrets_and_audited_networking() ->
     build_index = next(
         index
         for index, item in enumerate(build_steps)
-        if item["name"] == "Build source report"
+        if item["name"] == "Build report"
     )
     prebuild_runs = "\n".join(
         item.get("run", "") for item in build_steps[:build_index]
@@ -537,9 +557,21 @@ def test_workflow_contains_only_notification_secrets_and_audited_networking() ->
     assert "yfinance" not in raw
     assert "matplotlib" not in raw
     assert raw.count("semipulse_sentinel check-market-session") == 1
-    assert raw.count("semipulse_sentinel build-source") == 1
-    assert raw.count("semipulse_sentinel decide-source-publication") == 1
-    assert raw.count("semipulse_sentinel notify-source") == 1
+    assert raw.count("semipulse_sentinel build --watchlist") == 1
+    assert raw.count("semipulse_sentinel validate --site") == 1
+    assert raw.count("semipulse_sentinel decide-publication") == 1
+    assert raw.count("semipulse_sentinel notify --json") == 1
+    for forbidden in (
+        "build-source",
+        "validate-source",
+        "decide-source-publication",
+        "notify-source",
+        "semipulse_email_to",
+        "semipulse_source_post_id",
+        "semipulse_source_title",
+        "semipulse_image_count",
+    ):
+        assert forbidden not in raw
 
 
 def test_verifier_accepts_the_repository_workflow() -> None:
@@ -549,12 +581,45 @@ def test_verifier_accepts_the_repository_workflow() -> None:
 
 
 @pytest.mark.parametrize(
+    ("daily_marker", "source_marker"),
+    [
+        ("build --watchlist", "build-source --watchlist"),
+        ("validate --site", "validate-source --site"),
+        ("decide-publication", "decide-source-publication"),
+        ("notify --json", "notify-source --json"),
+        ("SEMIPULSE_REGIME", "SEMIPULSE_EMAIL_TO"),
+        ("SEMIPULSE_REGIME", "SEMIPULSE_SOURCE_POST_ID"),
+        ("SEMIPULSE_CONFIDENCE", "SEMIPULSE_SOURCE_TITLE"),
+        ("SEMIPULSE_COVERAGE", "SEMIPULSE_IMAGE_COUNT"),
+        ("SEMIPULSE_COVERAGE", "SEMIPULSE_SOURCE_UNEXPECTED"),
+    ],
+)
+def test_verifier_explicitly_rejects_source_copy_markers(
+    tmp_path: Path, daily_marker: str, source_marker: str
+) -> None:
+    candidate = tmp_path / "nightly-report.yml"
+    candidate.write_text(
+        _replace_once(
+            WORKFLOW.read_text(encoding="utf-8"), daily_marker, source_marker
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_verifier(candidate)
+
+    assert result.returncode != 0
+    assert "forbidden source-copy markers" in result.stderr
+
+
+@pytest.mark.parametrize(
     "mutation",
     [
         _mutation_unquoted_on,
         _mutation_mutable_action,
         _mutation_extra_permission,
         _mutation_build_before_test,
+        _mutation_reordered_jobs,
+        _mutation_missing_session_gate,
         _mutation_configure_enablement,
         _mutation_setup_cache,
         _mutation_secret,

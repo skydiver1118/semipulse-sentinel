@@ -24,7 +24,7 @@ def test_cli_help_names_the_program(capsys: pytest.CaptureFixture[str]) -> None:
     assert "usage: semipulse-sentinel" in capsys.readouterr().out
 
 
-def test_cli_help_exposes_source_only_workflow_commands(
+def test_cli_help_exposes_daily_production_commands(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as exit_info:
@@ -33,11 +33,11 @@ def test_cli_help_exposes_source_only_workflow_commands(
     assert exit_info.value.code == 0
     output = capsys.readouterr().out
     for command in (
-        "build-source",
-        "validate-source",
-        "decide-source-publication",
         "check-market-session",
-        "notify-source",
+        "build",
+        "validate",
+        "decide-publication",
+        "notify",
     ):
         assert command in output
 

@@ -97,6 +97,7 @@ _EXPECTED: dict[str, object] = {
         "PYTHONHASHSEED": "0",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "PIP_NO_INPUT": "1",
+        "MPLBACKEND": "Agg",
         "TZ": "America/New_York",
     },
     "jobs": {
@@ -107,11 +108,9 @@ _EXPECTED: dict[str, object] = {
             "outputs": {
                 "has_new_data": "${{ steps.publication.outputs.has_new_data }}",
                 "market_as_of": "${{ steps.publication.outputs.market_as_of }}",
-                "source_post_id": (
-                    "${{ steps.publication.outputs.source_post_id }}"
-                ),
-                "source_title": "${{ steps.publication.outputs.source_title }}",
-                "image_count": "${{ steps.publication.outputs.image_count }}",
+                "regime": "${{ steps.publication.outputs.regime }}",
+                "confidence": "${{ steps.publication.outputs.confidence }}",
+                "coverage": "${{ steps.publication.outputs.coverage }}",
             },
             "steps": [
                 {
@@ -152,18 +151,19 @@ _EXPECTED: dict[str, object] = {
                     ),
                 },
                 {
-                    "name": "Build source report",
+                    "name": "Build report",
                     "if": _SCAN_IF,
                     "run": (
-                        "python -m semipulse_sentinel build-source "
+                        "python -m semipulse_sentinel build --watchlist "
+                        "config/watchlist.csv "
                         "--output candidate-site --json"
                     ),
                 },
                 {
-                    "name": "Validate source site",
+                    "name": "Validate site",
                     "if": _SCAN_IF,
                     "run": (
-                        "python -m semipulse_sentinel validate-source "
+                        "python -m semipulse_sentinel validate "
                         "--site candidate-site --json"
                     ),
                 },
@@ -178,11 +178,11 @@ _EXPECTED: dict[str, object] = {
                     ),
                 },
                 {
-                    "name": "Decide source publication",
+                    "name": "Decide publication",
                     "id": "publication",
                     "if": _SCAN_IF,
                     "run": (
-                        "python -m semipulse_sentinel decide-source-publication "
+                        "python -m semipulse_sentinel decide-publication "
                         "--candidate candidate-site/report.json "
                         "--published published-report.json "
                         '--github-output "$GITHUB_OUTPUT" --json'
@@ -265,21 +265,21 @@ _EXPECTED: dict[str, object] = {
                         "SEMIPULSE_MARKET_AS_OF": (
                             "${{ needs.build.outputs.market_as_of }}"
                         ),
-                        "SEMIPULSE_SOURCE_POST_ID": (
-                            "${{ needs.build.outputs.source_post_id }}"
+                        "SEMIPULSE_REGIME": (
+                            "${{ needs.build.outputs.regime }}"
                         ),
-                        "SEMIPULSE_SOURCE_TITLE": (
-                            "${{ needs.build.outputs.source_title }}"
+                        "SEMIPULSE_CONFIDENCE": (
+                            "${{ needs.build.outputs.confidence }}"
                         ),
-                        "SEMIPULSE_IMAGE_COUNT": (
-                            "${{ needs.build.outputs.image_count }}"
+                        "SEMIPULSE_COVERAGE": (
+                            "${{ needs.build.outputs.coverage }}"
                         ),
                         "SEMIPULSE_DASHBOARD_URL": (
                             "https://skydiver1118.github.io/"
                             "semipulse-sentinel/"
                         ),
                     },
-                    "run": "python -m semipulse_sentinel notify-source --json",
+                    "run": "python -m semipulse_sentinel notify --json",
                 },
             ],
         },
@@ -299,6 +299,14 @@ _SECRET_NAMES = {
     "SEMIPULSE_SMTP_USER",
     "SEMIPULSE_SMTP_PASSWORD",
     "SEMIPULSE_EMAIL_FROM",
+}
+_FORBIDDEN_SOURCE_MARKERS = {
+    "build-source",
+    "validate-source",
+    "decide-source-publication",
+    "notify-source",
+    "SEMIPULSE_EMAIL_TO",
+    "SEMIPULSE_IMAGE_COUNT",
 }
 
 
@@ -322,10 +330,32 @@ def _load(text: str) -> Mapping[str, object]:
 
 def verify(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    forbidden = sorted(
+        {
+            marker
+            for marker in _FORBIDDEN_SOURCE_MARKERS
+            if marker in text
+        }
+        | set(re.findall(r"\bSEMIPULSE_SOURCE_[A-Z0-9_]+\b", text))
+    )
+    if forbidden:
+        raise WorkflowVerificationError(
+            "production workflow contains forbidden source-copy markers: "
+            + ", ".join(forbidden)
+        )
     document = _load(text)
+    jobs = document.get("jobs")
+    if not isinstance(jobs, Mapping) or list(jobs) != [
+        "build",
+        "deploy",
+        "notify",
+    ]:
+        raise WorkflowVerificationError(
+            "workflow jobs must be ordered build, deploy, notify"
+        )
     if document != _EXPECTED:
         raise WorkflowVerificationError(
-            "workflow differs from the exact audited source-copy contract"
+            "workflow differs from the exact audited daily-report contract"
         )
     for marker, count in _ACTION_COMMENTS.items():
         if text.count(marker) != count:
@@ -337,7 +367,7 @@ def verify(path: Path) -> None:
     )
     if secrets != _SECRET_NAMES:
         raise WorkflowVerificationError(
-            "workflow must use only the exact source-alert secrets"
+            "workflow must use only the exact daily-alert secrets"
         )
 
 

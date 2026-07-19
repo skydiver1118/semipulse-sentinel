@@ -8,11 +8,13 @@ from semipulse_sentinel.contracts import (
 from semipulse_sentinel.models import ReportSchedule
 
 
-def test_weekday_schedule_contract_is_exact() -> None:
+def test_trading_session_daily_schedule_contract_is_exact() -> None:
     assert SCHEDULE_CRON == "20 18 * * 1-5"
     assert SCHEDULE_TIMEZONE == "America/New_York"
-    assert "Monday through Friday" in SCHEDULE_DESCRIPTION
-    assert "market session advances" in SCHEDULE_DESCRIPTION
+    assert SCHEDULE_DESCRIPTION == (
+        "Monday through Friday at 6:20 PM America/New_York; publish only "
+        "when the completed market session advances"
+    )
     assert DASHBOARD_URL == "https://skydiver1118.github.io/semipulse-sentinel/"
     assert REPORT_JSON_URL == DASHBOARD_URL + "report.json"
 
