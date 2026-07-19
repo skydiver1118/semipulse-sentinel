@@ -92,6 +92,14 @@ _ACTIONS = (
         "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
         "v5.0.0",
     ),
+    (
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "v7.0.0",
+    ),
+    (
+        "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+        "v6.3.0",
+    ),
 )
 
 _EXPECTED: dict[str, object] = {
@@ -99,7 +107,7 @@ _EXPECTED: dict[str, object] = {
     "on": {
         "workflow_dispatch": {},
         "schedule": [
-            {"cron": "0 18 * * *", "timezone": "America/New_York"}
+            {"cron": "0 18 * * 1-5", "timezone": "America/New_York"}
         ],
     },
     "permissions": {"contents": "read"},
@@ -116,6 +124,13 @@ _EXPECTED: dict[str, object] = {
             "runs-on": "ubuntu-24.04",
             "timeout-minutes": 30,
             "permissions": {"contents": "read", "pages": "read"},
+            "outputs": {
+                "has_new_data": "${{ steps.publication.outputs.has_new_data }}",
+                "market_as_of": "${{ steps.publication.outputs.market_as_of }}",
+                "regime": "${{ steps.publication.outputs.regime }}",
+                "confidence": "${{ steps.publication.outputs.confidence }}",
+                "coverage": "${{ steps.publication.outputs.coverage }}",
+            },
             "steps": [
                 {
                     "name": "Checkout",
@@ -152,22 +167,47 @@ _EXPECTED: dict[str, object] = {
                     "name": "Build report",
                     "run": (
                         "python -m semipulse_sentinel build --watchlist "
-                        "config/watchlist.csv --output site --json"
+                        "config/watchlist.csv --output candidate-site --json"
                     ),
                 },
                 {
                     "name": "Validate site",
                     "run": (
-                        "python -m semipulse_sentinel validate --site site --json"
+                        "python -m semipulse_sentinel validate "
+                        "--site candidate-site --json"
                     ),
                 },
-                {"name": "Configure Pages", "uses": _ACTIONS[2][0]},
+                {
+                    "name": "Fetch published report",
+                    "run": (
+                        "curl --fail --show-error --silent --location --retry 3 "
+                        "--output published-report.json "
+                        '"https://skydiver1118.github.io/semipulse-sentinel/'
+                        'report.json?run_id=${GITHUB_RUN_ID}"'
+                    ),
+                },
+                {
+                    "name": "Decide publication",
+                    "id": "publication",
+                    "run": (
+                        "python -m semipulse_sentinel decide-publication "
+                        "--candidate candidate-site/report.json "
+                        "--published published-report.json "
+                        '--github-output "$GITHUB_OUTPUT" --json'
+                    ),
+                },
+                {
+                    "name": "Configure Pages",
+                    "if": "steps.publication.outputs.has_new_data == 'true'",
+                    "uses": _ACTIONS[2][0],
+                },
                 {
                     "name": "Upload Pages artifact",
+                    "if": "steps.publication.outputs.has_new_data == 'true'",
                     "uses": _ACTIONS[3][0],
                     "with": {
                         "name": "github-pages",
-                        "path": "site",
+                        "path": "candidate-site",
                         "retention-days": 1,
                     },
                 },
@@ -175,6 +215,7 @@ _EXPECTED: dict[str, object] = {
         },
         "deploy": {
             "needs": "build",
+            "if": "needs.build.outputs.has_new_data == 'true'",
             "runs-on": "ubuntu-24.04",
             "timeout-minutes": 10,
             "permissions": {"pages": "write", "id-token": "write"},
@@ -188,6 +229,68 @@ _EXPECTED: dict[str, object] = {
                     "id": "deployment",
                     "uses": _ACTIONS[4][0],
                 }
+            ],
+        },
+        "notify": {
+            "needs": ["build", "deploy"],
+            "if": (
+                "needs.build.outputs.has_new_data == 'true' && "
+                "needs.deploy.result == 'success'"
+            ),
+            "runs-on": "ubuntu-24.04",
+            "timeout-minutes": 5,
+            "permissions": {"contents": "read"},
+            "env": {"PYTHONPATH": "src"},
+            "steps": [
+                {
+                    "name": "Checkout notification source",
+                    "uses": _ACTIONS[5][0],
+                    "with": {"persist-credentials": False},
+                },
+                {
+                    "name": "Set up notification Python",
+                    "uses": _ACTIONS[6][0],
+                    "with": {"python-version": "3.11.15"},
+                },
+                {
+                    "name": "Send report email",
+                    "env": {
+                        "SEMIPULSE_SMTP_HOST": (
+                            "${{ secrets.SEMIPULSE_SMTP_HOST }}"
+                        ),
+                        "SEMIPULSE_SMTP_PORT": (
+                            "${{ secrets.SEMIPULSE_SMTP_PORT }}"
+                        ),
+                        "SEMIPULSE_SMTP_USER": (
+                            "${{ secrets.SEMIPULSE_SMTP_USER }}"
+                        ),
+                        "SEMIPULSE_SMTP_PASSWORD": (
+                            "${{ secrets.SEMIPULSE_SMTP_PASSWORD }}"
+                        ),
+                        "SEMIPULSE_EMAIL_FROM": (
+                            "${{ secrets.SEMIPULSE_EMAIL_FROM }}"
+                        ),
+                        "SEMIPULSE_EMAIL_TO": (
+                            "${{ secrets.SEMIPULSE_EMAIL_TO }}"
+                        ),
+                        "SEMIPULSE_MARKET_AS_OF": (
+                            "${{ needs.build.outputs.market_as_of }}"
+                        ),
+                        "SEMIPULSE_REGIME": (
+                            "${{ needs.build.outputs.regime }}"
+                        ),
+                        "SEMIPULSE_CONFIDENCE": (
+                            "${{ needs.build.outputs.confidence }}"
+                        ),
+                        "SEMIPULSE_COVERAGE": (
+                            "${{ needs.build.outputs.coverage }}"
+                        ),
+                        "SEMIPULSE_DASHBOARD_URL": (
+                            "https://skydiver1118.github.io/semipulse-sentinel/"
+                        ),
+                    },
+                    "run": "python -m semipulse_sentinel notify --json",
+                },
             ],
         },
     },
@@ -286,9 +389,22 @@ def _uses_values(document: Mapping[object, object]) -> list[str]:
 
 def _verify_security(text: str, document: Mapping[object, object]) -> None:
     lowered = text.casefold()
-    for marker in ("${{ secrets.", "${{ github.token", "contents: write"):
+    for marker in ("${{ github.token", "contents: write"):
         if marker in lowered:
             _fail(f"forbidden credential or permission marker: {marker}")
+    allowed_secrets = {
+        "SEMIPULSE_SMTP_HOST",
+        "SEMIPULSE_SMTP_PORT",
+        "SEMIPULSE_SMTP_USER",
+        "SEMIPULSE_SMTP_PASSWORD",
+        "SEMIPULSE_EMAIL_FROM",
+        "SEMIPULSE_EMAIL_TO",
+    }
+    observed_secrets = set(
+        re.findall(r"\$\{\{ secrets\.([A-Z0-9_]+) \}\}", text)
+    )
+    if observed_secrets != allowed_secrets:
+        _fail("workflow must use only the exact SemiPulse notification secrets")
     if _uses_values(document) != [reference for reference, _version in _ACTIONS]:
         _fail("workflow actions must be first-party and pinned exactly once")
 
@@ -313,6 +429,10 @@ def _verify_security(text: str, document: Mapping[object, object]) -> None:
             _fail(f"network-capable command appears before the live build: {marker}")
     if lowered.count("semipulse_sentinel build") != 1:
         _fail("workflow must contain exactly one live report build")
+    if lowered.count("semipulse_sentinel decide-publication") != 1:
+        _fail("workflow must contain exactly one publication decision")
+    if lowered.count("semipulse_sentinel notify") != 1:
+        _fail("workflow must contain exactly one notification command")
 
 
 def _verify_action_comments(text: str) -> None:

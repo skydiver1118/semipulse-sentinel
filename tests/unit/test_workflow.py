@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -42,6 +43,16 @@ EXPECTED_ACTIONS = (
         "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
         "v5.0.0",
     ),
+    (
+        "Checkout notification source",
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "v7.0.0",
+    ),
+    (
+        "Set up notification Python",
+        "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+        "v6.3.0",
+    ),
 )
 EXPECTED_RUNS = {
     "Install locked dependencies": (
@@ -54,9 +65,23 @@ EXPECTED_RUNS = {
     "Run offline tests": "python -m pytest -q",
     "Build report": (
         "python -m semipulse_sentinel build --watchlist config/watchlist.csv "
-        "--output site --json"
+        "--output candidate-site --json"
     ),
-    "Validate site": "python -m semipulse_sentinel validate --site site --json",
+    "Validate site": (
+        "python -m semipulse_sentinel validate --site candidate-site --json"
+    ),
+    "Fetch published report": (
+        "curl --fail --show-error --silent --location --retry 3 "
+        "--output published-report.json "
+        '"https://skydiver1118.github.io/semipulse-sentinel/'
+        'report.json?run_id=${GITHUB_RUN_ID}"'
+    ),
+    "Decide publication": (
+        "python -m semipulse_sentinel decide-publication "
+        "--candidate candidate-site/report.json "
+        "--published published-report.json "
+        '--github-output "$GITHUB_OUTPUT" --json'
+    ),
 }
 
 
@@ -79,6 +104,11 @@ def _replace_once(text: str, old: str, new: str) -> str:
     return text.replace(old, new, 1)
 
 
+def _replace_first(text: str, old: str, new: str) -> str:
+    assert old in text, old
+    return text.replace(old, new, 1)
+
+
 def _run_verifier(path: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(VERIFIER), str(path)],
@@ -93,7 +123,7 @@ def _mutation_unquoted_on(text: str) -> str:
 
 
 def _mutation_mutable_action(text: str) -> str:
-    return _replace_once(
+    return _replace_first(
         text,
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",
         "actions/checkout@v7 # v7.0.0",
@@ -114,7 +144,8 @@ def _mutation_build_before_test(text: str) -> str:
         "      - name: Build report\n"
         "        run: >-\n"
         "          python -m semipulse_sentinel build --watchlist "
-        "config/watchlist.csv --output site --json"
+        "config/watchlist.csv\n"
+        "          --output candidate-site --json"
     )
     return _replace_once(text, f"{tests}\n\n{build}", f"{build}\n\n{tests}")
 
@@ -132,7 +163,7 @@ def _mutation_configure_enablement(text: str) -> str:
 
 
 def _mutation_setup_cache(text: str) -> str:
-    return _replace_once(
+    return _replace_first(
         text,
         '          python-version: "3.11.15"',
         '          python-version: "3.11.15"\n          cache: pip',
@@ -148,7 +179,7 @@ def _mutation_secret(text: str) -> str:
 
 
 def _mutation_third_party_action(text: str) -> str:
-    return _replace_once(text, "actions/checkout@", "example/checkout@")
+    return _replace_first(text, "actions/checkout@", "example/checkout@")
 
 
 def _mutation_prebuild_network(text: str) -> str:
@@ -238,11 +269,12 @@ def _mutation_merge_at_position(
         ),
     }
     old, new = replacements[position]
-    return _replace_once(text, old, new)
+    replace = _replace_first if position in {"step", "with"} else _replace_once
+    return replace(text, old, new)
 
 
 def _mutation_nested_alias(text: str) -> str:
-    return _replace_once(
+    return _replace_first(
         text,
         "        with:\n          persist-credentials: false",
         (
@@ -255,7 +287,7 @@ def _mutation_nested_alias(text: str) -> str:
 
 
 def _mutation_explicit_tag(text: str) -> str:
-    return _replace_once(
+    return _replace_first(
         text,
         '          python-version: "3.11.15"',
         '          python-version: !!str "3.11.15"',
@@ -284,7 +316,7 @@ def test_workflow_has_exact_top_level_contract() -> None:
     assert document["on"] == {
         "workflow_dispatch": {},
         "schedule": [
-            {"cron": "0 18 * * *", "timezone": "America/New_York"}
+            {"cron": "0 18 * * 1-5", "timezone": "America/New_York"}
         ],
     }
     assert document["permissions"] == {"contents": "read"}
@@ -305,14 +337,29 @@ def test_jobs_have_exact_runners_timeouts_permissions_and_deploy_gate() -> None:
     jobs = _load_workflow()["jobs"]
     build = jobs["build"]
     deploy = jobs["deploy"]
+    notify = jobs["notify"]
 
-    assert set(jobs) == {"build", "deploy"}
-    assert set(build) == {"runs-on", "timeout-minutes", "permissions", "steps"}
+    assert set(jobs) == {"build", "deploy", "notify"}
+    assert set(build) == {
+        "runs-on",
+        "timeout-minutes",
+        "permissions",
+        "outputs",
+        "steps",
+    }
     assert build["runs-on"] == "ubuntu-24.04"
     assert build["timeout-minutes"] == 30
     assert build["permissions"] == {"contents": "read", "pages": "read"}
+    assert build["outputs"] == {
+        "has_new_data": "${{ steps.publication.outputs.has_new_data }}",
+        "market_as_of": "${{ steps.publication.outputs.market_as_of }}",
+        "regime": "${{ steps.publication.outputs.regime }}",
+        "confidence": "${{ steps.publication.outputs.confidence }}",
+        "coverage": "${{ steps.publication.outputs.coverage }}",
+    }
     assert set(deploy) == {
         "needs",
+        "if",
         "runs-on",
         "timeout-minutes",
         "permissions",
@@ -320,6 +367,7 @@ def test_jobs_have_exact_runners_timeouts_permissions_and_deploy_gate() -> None:
         "steps",
     }
     assert deploy["needs"] == "build"
+    assert deploy["if"] == "needs.build.outputs.has_new_data == 'true'"
     assert deploy["runs-on"] == "ubuntu-24.04"
     assert deploy["timeout-minutes"] == 10
     assert deploy["permissions"] == {"pages": "write", "id-token": "write"}
@@ -327,6 +375,15 @@ def test_jobs_have_exact_runners_timeouts_permissions_and_deploy_gate() -> None:
         "name": "github-pages",
         "url": "${{ steps.deployment.outputs.page_url }}",
     }
+    assert notify["needs"] == ["build", "deploy"]
+    assert notify["if"] == (
+        "needs.build.outputs.has_new_data == 'true' && "
+        "needs.deploy.result == 'success'"
+    )
+    assert notify["runs-on"] == "ubuntu-24.04"
+    assert notify["timeout-minutes"] == 5
+    assert notify["permissions"] == {"contents": "read"}
+    assert notify["env"] == {"PYTHONPATH": "src"}
 
 
 def test_build_steps_have_exact_order_commands_and_artifact() -> None:
@@ -341,6 +398,8 @@ def test_build_steps_have_exact_order_commands_and_artifact() -> None:
         "Run offline tests",
         "Build report",
         "Validate site",
+        "Fetch published report",
+        "Decide publication",
         "Configure Pages",
         "Upload Pages artifact",
     ]
@@ -353,18 +412,24 @@ def test_build_steps_have_exact_order_commands_and_artifact() -> None:
     }
     assert _step(steps, "Upload Pages artifact")["with"] == {
         "name": "github-pages",
-        "path": "site",
+        "path": "candidate-site",
         "retention-days": 1,
     }
+    assert _step(steps, "Decide publication")["id"] == "publication"
+    for name in ("Configure Pages", "Upload Pages artifact"):
+        assert _step(steps, name)["if"] == (
+            "steps.publication.outputs.has_new_data == 'true'"
+        )
 
 
 def test_all_actions_use_exact_sha_and_adjacent_version_comment() -> None:
     document = _load_workflow()
     build_steps = _build_steps(document)
     deploy_steps = document["jobs"]["deploy"]["steps"]
+    notify_steps = document["jobs"]["notify"]["steps"]
     actual = [
         (item["name"], item["uses"])
-        for item in [*build_steps, *deploy_steps]
+        for item in [*build_steps, *deploy_steps, *notify_steps]
         if "uses" in item
     ]
 
@@ -383,12 +448,41 @@ def test_deploy_has_one_exact_deployment_step() -> None:
         {
             "name": "Deploy Pages",
             "id": "deployment",
-            "uses": EXPECTED_ACTIONS[-1][1],
+                "uses": EXPECTED_ACTIONS[4][1],
         }
     ]
 
 
-def test_workflow_contains_no_secret_cache_or_extra_network_mechanism() -> None:
+def test_notify_job_has_exact_source_setup_and_secret_boundary() -> None:
+    steps = _load_workflow()["jobs"]["notify"]["steps"]
+
+    assert [item["name"] for item in steps] == [
+        "Checkout notification source",
+        "Set up notification Python",
+        "Send report email",
+    ]
+    assert steps[0]["with"] == {"persist-credentials": False}
+    assert steps[1]["with"] == {"python-version": "3.11.15"}
+    send = steps[2]
+    assert send["run"] == "python -m semipulse_sentinel notify --json"
+    assert send["env"] == {
+        "SEMIPULSE_SMTP_HOST": "${{ secrets.SEMIPULSE_SMTP_HOST }}",
+        "SEMIPULSE_SMTP_PORT": "${{ secrets.SEMIPULSE_SMTP_PORT }}",
+        "SEMIPULSE_SMTP_USER": "${{ secrets.SEMIPULSE_SMTP_USER }}",
+        "SEMIPULSE_SMTP_PASSWORD": "${{ secrets.SEMIPULSE_SMTP_PASSWORD }}",
+        "SEMIPULSE_EMAIL_FROM": "${{ secrets.SEMIPULSE_EMAIL_FROM }}",
+        "SEMIPULSE_EMAIL_TO": "${{ secrets.SEMIPULSE_EMAIL_TO }}",
+        "SEMIPULSE_MARKET_AS_OF": "${{ needs.build.outputs.market_as_of }}",
+        "SEMIPULSE_REGIME": "${{ needs.build.outputs.regime }}",
+        "SEMIPULSE_CONFIDENCE": "${{ needs.build.outputs.confidence }}",
+        "SEMIPULSE_COVERAGE": "${{ needs.build.outputs.coverage }}",
+        "SEMIPULSE_DASHBOARD_URL": (
+            "https://skydiver1118.github.io/semipulse-sentinel/"
+        ),
+    }
+
+
+def test_workflow_contains_only_notification_secrets_and_audited_networking() -> None:
     raw = WORKFLOW.read_text(encoding="utf-8").casefold()
     build_steps = _build_steps(_load_workflow())
     build_index = next(
@@ -400,7 +494,14 @@ def test_workflow_contains_no_secret_cache_or_extra_network_mechanism() -> None:
         item.get("run", "") for item in build_steps[:build_index]
     ).casefold()
 
-    assert "secrets." not in raw
+    assert set(re.findall(r"\$\{\{ secrets\.([a-z0-9_]+) \}\}", raw)) == {
+        "semipulse_smtp_host",
+        "semipulse_smtp_port",
+        "semipulse_smtp_user",
+        "semipulse_smtp_password",
+        "semipulse_email_from",
+        "semipulse_email_to",
+    }
     assert "github.token" not in raw
     assert "cache:" not in raw
     assert "enablement:" not in raw
@@ -409,6 +510,8 @@ def test_workflow_contains_no_secret_cache_or_extra_network_mechanism() -> None:
         for marker in ("curl ", "wget ", "http://", "https://", "yfinance")
     )
     assert raw.count("semipulse_sentinel build") == 1
+    assert raw.count("semipulse_sentinel decide-publication") == 1
+    assert raw.count("semipulse_sentinel notify") == 1
 
 
 def test_verifier_accepts_the_repository_workflow() -> None:
