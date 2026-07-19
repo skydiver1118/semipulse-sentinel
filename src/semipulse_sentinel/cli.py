@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from collections.abc import Sequence
@@ -51,6 +52,11 @@ def _parser() -> argparse.ArgumentParser:
     publication.add_argument("--published", type=Path, required=True)
     publication.add_argument("--github-output", type=Path, required=True)
     publication.add_argument("--json", action="store_true", dest="json_output")
+
+    notify = commands.add_parser(
+        "notify", help="Send one post-deploy report alert from environment settings"
+    )
+    notify.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
 
@@ -193,6 +199,20 @@ def _decide_publication(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _notify(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.notifications import (
+        ReportAlert,
+        SmtpSettings,
+        send_report_alert,
+    )
+
+    settings = SmtpSettings.from_environment(os.environ)
+    alert = ReportAlert.from_environment(os.environ)
+    result = send_report_alert(settings, alert)
+    _emit(result, json_output=arguments.json_output)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run a command with stable, documented process exit codes."""
 
@@ -206,6 +226,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _doctor(arguments)
         if arguments.command == "decide-publication":
             return _decide_publication(arguments)
+        if arguments.command == "notify":
+            return _notify(arguments)
         raise RuntimeError("unreachable command")
     except KeyboardInterrupt:
         raise
@@ -222,6 +244,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     except Exception as error:
+        if arguments.command == "notify":
+            from semipulse_sentinel.notifications import NotificationFailed
+
+            if isinstance(error, NotificationFailed):
+                _emit(
+                    {
+                        "status": "error",
+                        "category": "notification",
+                        "message": str(error),
+                    },
+                    json_output=arguments.json_output,
+                    error=True,
+                )
+                return 4
+            _emit(
+                {
+                    "status": "error",
+                    "category": "unexpected",
+                    "message": f"unexpected failure ({type(error).__name__})",
+                },
+                json_output=arguments.json_output,
+                error=True,
+            )
+            return 4
         from semipulse_sentinel.pipeline import BuildFailed
         from semipulse_sentinel.quality import PublicationBlocked
 

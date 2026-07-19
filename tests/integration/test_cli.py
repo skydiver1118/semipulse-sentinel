@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 
 import semipulse_sentinel.cli as cli
+import semipulse_sentinel.notifications as notifications
 from semipulse_sentinel.cli import main
+from semipulse_sentinel.notifications import NotificationFailed
 from semipulse_sentinel.providers.yfinance_provider import YFinanceProvider
 
 WATCHLIST = Path(__file__).parents[2] / "config" / "watchlist.csv"
@@ -31,6 +33,26 @@ def _publication_report(path: Path, market_as_of: str) -> Path:
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def _notification_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    values = {
+        "SEMIPULSE_SMTP_HOST": "smtp.gmail.com",
+        "SEMIPULSE_SMTP_PORT": "587",
+        "SEMIPULSE_SMTP_USER": "sender@example.com",
+        "SEMIPULSE_SMTP_PASSWORD": "secret-app-password",
+        "SEMIPULSE_EMAIL_FROM": "sender@example.com",
+        "SEMIPULSE_EMAIL_TO": "1118xmb@gmail.com",
+        "SEMIPULSE_MARKET_AS_OF": "2026-07-20",
+        "SEMIPULSE_REGIME": "defensive",
+        "SEMIPULSE_CONFIDENCE": "medium",
+        "SEMIPULSE_COVERAGE": "21/23 (91.3%)",
+        "SEMIPULSE_DASHBOARD_URL": (
+            "https://skydiver1118.github.io/semipulse-sentinel/"
+        ),
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
 
 
 def test_doctor_is_offline_and_reports_missing_site_as_diagnosis(
@@ -166,6 +188,49 @@ def test_decide_publication_rejects_regressed_date_without_outputs(
     assert payload["category"] == "configuration"
     assert "regressed" in payload["message"]
     assert not github_output.exists()
+
+
+def test_notify_emits_only_safe_delivery_metadata(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _notification_environment(monkeypatch)
+
+    def send_once(*_args: object, **_kwargs: object) -> dict[str, str]:
+        return {"status": "sent", "market_as_of": "2026-07-20"}
+
+    monkeypatch.setattr(notifications, "send_report_alert", send_once)
+
+    assert main(["notify", "--json"]) == 0
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "market_as_of": "2026-07-20",
+        "status": "sent",
+    }
+    assert "1118xmb" not in output
+    assert "secret-app-password" not in output
+    assert "sender@example.com" not in output
+
+
+def test_notify_failure_is_sanitized_before_heavy_cli_imports(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _notification_environment(monkeypatch)
+
+    def fail(*_args: object, **_kwargs: object) -> dict[str, str]:
+        raise NotificationFailed("report alert delivery failed") from RuntimeError(
+            "upstream-secret-detail"
+        )
+
+    monkeypatch.setattr(notifications, "send_report_alert", fail)
+
+    assert main(["notify", "--json"]) == 4
+    output = capsys.readouterr().err
+    assert json.loads(output) == {
+        "category": "notification",
+        "message": "report alert delivery failed",
+        "status": "error",
+    }
+    assert "upstream-secret-detail" not in output
 
 
 def test_unexpected_cli_error_is_sanitized(
