@@ -21,6 +21,11 @@ from xml.etree import ElementTree
 
 from jinja2 import Environment, StrictUndefined, select_autoescape
 
+from semipulse_sentinel.contracts import (
+    REPORT_SCHEMA_VERSION,
+    SCHEDULE_CRON,
+    SCHEDULE_TIMEZONE,
+)
 from semipulse_sentinel.models import (
     ChartInsight,
     CompositeAuditRecord,
@@ -30,7 +35,6 @@ from semipulse_sentinel.models import (
 )
 from semipulse_sentinel.quality import PublicationBlocked
 
-REPORT_SCHEMA_VERSION = "semipulse-report-v1"
 RISK_WARNING = (
     "Research only—not individualized investment advice or a recommendation to "
     "buy or sell. Market data may be delayed, incomplete, or revised. Leveraged "
@@ -1030,8 +1034,8 @@ def validate_site(path: Path) -> SiteValidation:
     )
     _require(isinstance(coverage.get("exclusions"), list), "exclusions missing")
     _require(
-        schedule.get("cron") == "0 18 * * *"
-        and schedule.get("timezone") == "America/New_York",
+        schedule.get("cron") == SCHEDULE_CRON
+        and schedule.get("timezone") == SCHEDULE_TIMEZONE,
         "schedule disclosure",
     )
     _nonempty_string(schedule.get("description"), "schedule description")

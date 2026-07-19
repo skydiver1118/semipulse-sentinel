@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 
+from .contracts import SCHEDULE_CRON, SCHEDULE_DESCRIPTION, SCHEDULE_TIMEZONE
 from .version import __version__
 
 
@@ -149,9 +150,9 @@ def _doctor(arguments: argparse.Namespace) -> int:
             "site_state": site_state,
             "site_diagnosis": diagnosis,
             "schedule": {
-                "cron": "0 18 * * *",
-                "timezone": "America/New_York",
-                "description": "Every calendar day at 6:00 PM America/New_York",
+                "cron": SCHEDULE_CRON,
+                "timezone": SCHEDULE_TIMEZONE,
+                "description": SCHEDULE_DESCRIPTION,
             },
         },
         json_output=arguments.json_output,

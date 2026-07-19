@@ -6,6 +6,8 @@ from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
+from semipulse_sentinel.contracts import SCHEDULE_CRON, SCHEDULE_TIMEZONE
+
 
 @dataclass(frozen=True, slots=True)
 class QualityReport:
@@ -206,8 +208,10 @@ class ReportSchedule:
     description: str
 
     def __post_init__(self) -> None:
-        if self.cron != "0 18 * * *" or self.timezone != "America/New_York":
-            raise ValueError("report schedule must be 18:00 America/New_York")
+        if self.cron != SCHEDULE_CRON or self.timezone != SCHEDULE_TIMEZONE:
+            raise ValueError(
+                "report schedule must be 18:00 America/New_York on weekdays"
+            )
 
 
 @dataclass(frozen=True, slots=True)

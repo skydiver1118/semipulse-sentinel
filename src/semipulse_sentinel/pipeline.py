@@ -17,6 +17,14 @@ import pandas as pd  # type: ignore[import-untyped]
 
 from semipulse_sentinel.charts import CHART_SPECS, render_charts
 from semipulse_sentinel.config import AppConfig
+from semipulse_sentinel.contracts import (
+    AGENT_NAME,
+    AGENT_SLUG,
+    REPORT_SCHEMA_VERSION,
+    SCHEDULE_CRON,
+    SCHEDULE_DESCRIPTION,
+    SCHEDULE_TIMEZONE,
+)
 from semipulse_sentinel.interpret import (
     RULES_VERSION,
     build_composite,
@@ -45,7 +53,6 @@ from semipulse_sentinel.models import (
 from semipulse_sentinel.providers.base import MarketData, MarketDataProvider
 from semipulse_sentinel.quality import PublicationBlocked, validate_market_data
 from semipulse_sentinel.report import (
-    REPORT_SCHEMA_VERSION,
     RISK_WARNING,
     _site_tree,
     render_report,
@@ -61,13 +68,6 @@ ChartRenderer = Callable[
 ]
 RenameOperation = Callable[[Path, Path], None]
 
-_AGENT_NAME = "SemiPulse Sentinel"
-_AGENT_SLUG = "semipulse-sentinel"
-_SCHEDULE_CRON = "0 18 * * *"
-_SCHEDULE_TIMEZONE = "America/New_York"
-_SCHEDULE_DESCRIPTION = (
-    "Every calendar day at 6:00 PM America/New_York; actual starts may be delayed"
-)
 _LIMITATIONS = (
     "The missing uploaded file could not be proven to be the recovered watchlist; "
     "all rows remain labeled recovered_inference until confirmed or replaced.",
@@ -313,24 +313,24 @@ def _model(
     )
     return ReportModel(
         schema_version=REPORT_SCHEMA_VERSION,
-        agent_name=_AGENT_NAME,
-        agent_slug=_AGENT_SLUG,
+        agent_name=AGENT_NAME,
+        agent_slug=AGENT_SLUG,
         title="SemiPulse Sentinel — Semiconductor Market Regime Report",
-        timezone=_SCHEDULE_TIMEZONE,
+        timezone=SCHEDULE_TIMEZONE,
         market_as_of=metrics.as_of,
         build=BuildMetadata(
             version=__version__, started_at=started_at, completed_at=completed_at
         ),
         schedule=ReportSchedule(
-            cron=_SCHEDULE_CRON,
-            timezone=_SCHEDULE_TIMEZONE,
-            description=_SCHEDULE_DESCRIPTION,
+            cron=SCHEDULE_CRON,
+            timezone=SCHEDULE_TIMEZONE,
+            description=SCHEDULE_DESCRIPTION,
         ),
         freshness=_freshness(
             quality,
             data,
             completed_at,
-            _expected_market_session(started_at, _SCHEDULE_TIMEZONE),
+            _expected_market_session(started_at, SCHEDULE_TIMEZONE),
         ),
         coverage=ReportCoverage(
             covered_count=quality.covered_count,
@@ -532,7 +532,7 @@ def build_report(
     """Build, validate, and atomically publish one complete static report."""
 
     settings = config or AppConfig()
-    if settings.chart_count != 8 or settings.timezone != _SCHEDULE_TIMEZONE:
+    if settings.chart_count != 8 or settings.timezone != SCHEDULE_TIMEZONE:
         raise ValueError("report configuration must use eight charts and New York time")
     started_at = _now(clock)
     destination, parent = _destination(output_path)

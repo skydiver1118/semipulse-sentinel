@@ -39,8 +39,14 @@ def test_doctor_is_offline_and_reports_missing_site_as_diagnosis(
     payload = json.loads(captured.out)
     assert code == 0
     assert payload["site_state"] == "missing"
-    assert payload["schedule"]["cron"] == "0 18 * * *"
-    assert payload["schedule"]["timezone"] == "America/New_York"
+    assert payload["schedule"] == {
+        "cron": "0 18 * * 1-5",
+        "timezone": "America/New_York",
+        "description": (
+            "Monday through Friday at 6:00 PM America/New_York; publish only "
+            "when the completed market session advances"
+        ),
+    }
     assert payload["provider"] == "yfinance"
 
 
