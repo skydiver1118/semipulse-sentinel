@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 _REGIMES = {"risk-on", "constructive", "mixed", "defensive", "risk-off"}
 _CONFIDENCE = {"high", "medium", "low"}
+SOURCE_ALERT_RECIPIENT = "1118xmb@gmail.com"
 
 
 class NotificationFailed(RuntimeError):
@@ -94,6 +95,28 @@ class SmtpSettings:
             recipient=_required(environment, "SEMIPULSE_EMAIL_TO"),
         )
 
+    @classmethod
+    def from_source_environment(
+        cls, environment: Mapping[str, str]
+    ) -> SmtpSettings:
+        """Load SMTP credentials while hard-locking the source-alert recipient."""
+
+        port_text = _required(environment, "SEMIPULSE_SMTP_PORT")
+        try:
+            port = int(port_text)
+        except ValueError as error:
+            raise ValueError("SMTP port must be an integer") from error
+        return cls(
+            host=_required(environment, "SEMIPULSE_SMTP_HOST"),
+            port=port,
+            username=_required(environment, "SEMIPULSE_SMTP_USER"),
+            password=_required(
+                environment, "SEMIPULSE_SMTP_PASSWORD", strip=False
+            ),
+            sender=_required(environment, "SEMIPULSE_EMAIL_FROM"),
+            recipient=SOURCE_ALERT_RECIPIENT,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ReportAlert:
@@ -143,6 +166,67 @@ class ReportAlert:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class SourceReportAlert:
+    """Safe source-copy facts included in one post-deploy email."""
+
+    market_as_of: date
+    source_post_id: int
+    source_title: str
+    image_count: int
+    dashboard_url: str
+
+    def __post_init__(self) -> None:
+        _single_line(self.source_title, "source title")
+        dashboard_url = _single_line(self.dashboard_url, "dashboard URL")
+        if self.source_post_id < 1:
+            raise ValueError("source post id must be positive")
+        if not 1 <= self.image_count <= 12:
+            raise ValueError("source image count must be between 1 and 12")
+        parsed = urlsplit(dashboard_url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError(
+                "dashboard URL must be an HTTPS URL without credentials"
+            )
+
+    @classmethod
+    def from_environment(
+        cls, environment: Mapping[str, str]
+    ) -> SourceReportAlert:
+        """Load only validated source facts produced by the build job."""
+
+        market_text = _required(environment, "SEMIPULSE_MARKET_AS_OF")
+        try:
+            market_as_of = date.fromisoformat(market_text)
+        except ValueError as error:
+            raise ValueError(
+                "SEMIPULSE_MARKET_AS_OF must be an ISO date"
+            ) from error
+        if market_as_of.isoformat() != market_text:
+            raise ValueError(
+                "SEMIPULSE_MARKET_AS_OF must be a canonical ISO date"
+            )
+        try:
+            post_id = int(_required(environment, "SEMIPULSE_SOURCE_POST_ID"))
+            image_count = int(_required(environment, "SEMIPULSE_IMAGE_COUNT"))
+        except ValueError as error:
+            raise ValueError(
+                "source post id and image count must be integers"
+            ) from error
+        return cls(
+            market_as_of=market_as_of,
+            source_post_id=post_id,
+            source_title=_required(environment, "SEMIPULSE_SOURCE_TITLE"),
+            image_count=image_count,
+            dashboard_url=_required(environment, "SEMIPULSE_DASHBOARD_URL"),
+        )
+
+
 def build_message(settings: SmtpSettings, alert: ReportAlert) -> EmailMessage:
     """Build a plain-text and escaped-HTML report-ready message."""
 
@@ -179,6 +263,43 @@ def build_message(settings: SmtpSettings, alert: ReportAlert) -> EmailMessage:
     return message
 
 
+def build_source_message(
+    settings: SmtpSettings, alert: SourceReportAlert
+) -> EmailMessage:
+    """Build a source-copy report-ready message with one report link."""
+
+    message = EmailMessage()
+    message["Subject"] = (
+        f"[SemiPulse] Source charts ready — {alert.market_as_of.isoformat()}"
+    )
+    message["From"] = settings.sender
+    message["To"] = settings.recipient
+    message.set_content(
+        "SemiPulse Sentinel source-copy report is ready.\n\n"
+        f"Market as of: {alert.market_as_of.isoformat()}\n"
+        f"Source post: {alert.source_title} (#{alert.source_post_id})\n"
+        f"Copied: {alert.image_count} source images\n\n"
+        f"View report: {alert.dashboard_url}\n\n"
+        "Research only — not individualized investment advice.\n"
+    )
+    url = escape(alert.dashboard_url, quote=True)
+    message.add_alternative(
+        "<!doctype html><html><body>"
+        "<p>SemiPulse Sentinel source-copy report is ready.</p>"
+        "<ul>"
+        f"<li>Market as of: {escape(alert.market_as_of.isoformat())}</li>"
+        f"<li>Source post: {escape(alert.source_title)} "
+        f"(#{alert.source_post_id})</li>"
+        f"<li>Copied: {alert.image_count} source images</li>"
+        "</ul>"
+        f'<p><a href="{url}">View the SemiPulse Sentinel report</a></p>'
+        "<p>Research only — not individualized investment advice.</p>"
+        "</body></html>",
+        subtype="html",
+    )
+    return message
+
+
 def send_report_alert(
     settings: SmtpSettings,
     alert: ReportAlert,
@@ -188,6 +309,27 @@ def send_report_alert(
     """Send one report alert and expose no credentials in the result."""
 
     message = build_message(settings, alert)
+    factory = smtp_factory or cast(SmtpFactory, smtplib.SMTP)
+    try:
+        context = ssl.create_default_context()
+        with factory(settings.host, settings.port, timeout=20) as server:
+            server.starttls(context=context)
+            server.login(settings.username, settings.password)
+            server.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        raise NotificationFailed("report alert delivery failed") from error
+    return {"status": "sent", "market_as_of": alert.market_as_of.isoformat()}
+
+
+def send_source_report_alert(
+    settings: SmtpSettings,
+    alert: SourceReportAlert,
+    *,
+    smtp_factory: SmtpFactory | None = None,
+) -> dict[str, object]:
+    """Send one fixed-recipient source alert without exposing credentials."""
+
+    message = build_source_message(settings, alert)
     factory = smtp_factory or cast(SmtpFactory, smtplib.SMTP)
     try:
         context = ssl.create_default_context()

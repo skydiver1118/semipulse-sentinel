@@ -58,6 +58,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     notify.add_argument("--json", action="store_true", dest="json_output")
 
+    notify_source = commands.add_parser(
+        "notify-source",
+        help="Send one fixed-recipient source-copy report alert",
+    )
+    notify_source.add_argument("--json", action="store_true", dest="json_output")
+
     build_source = commands.add_parser(
         "build-source",
         help="Copy the newest qualifying Wenxuecity chart post into a report",
@@ -253,6 +259,20 @@ def _notify(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _notify_source(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.notifications import (
+        SmtpSettings,
+        SourceReportAlert,
+        send_source_report_alert,
+    )
+
+    settings = SmtpSettings.from_source_environment(os.environ)
+    alert = SourceReportAlert.from_environment(os.environ)
+    result = send_source_report_alert(settings, alert)
+    _emit(result, json_output=arguments.json_output)
+    return 0
+
+
 def _build_source(arguments: argparse.Namespace) -> int:
     from semipulse_sentinel.source_report import build_source_report
     from semipulse_sentinel.wenxuecity_source import (
@@ -379,6 +399,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _decide_publication(arguments)
         if arguments.command == "notify":
             return _notify(arguments)
+        if arguments.command == "notify-source":
+            return _notify_source(arguments)
         if arguments.command == "build-source":
             return _build_source(arguments)
         if arguments.command == "validate-source":
@@ -403,7 +425,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     except Exception as error:
-        if arguments.command == "notify":
+        if arguments.command in {"notify", "notify-source"}:
             from semipulse_sentinel.notifications import NotificationFailed
 
             if isinstance(error, NotificationFailed):

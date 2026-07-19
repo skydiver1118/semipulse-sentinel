@@ -37,6 +37,7 @@ def test_cli_help_exposes_source_only_workflow_commands(
         "validate-source",
         "decide-source-publication",
         "check-market-session",
+        "notify-source",
     ):
         assert command in output
 

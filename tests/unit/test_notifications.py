@@ -7,10 +7,13 @@ from typing import ClassVar
 import pytest
 
 from semipulse_sentinel.notifications import (
+    SOURCE_ALERT_RECIPIENT,
     NotificationFailed,
     ReportAlert,
     SmtpSettings,
+    SourceReportAlert,
     send_report_alert,
+    send_source_report_alert,
 )
 
 
@@ -161,3 +164,55 @@ def test_smtp_failure_is_sanitized() -> None:
 
     assert str(captured.value) == "report alert delivery failed"
     assert "upstream-secret-detail" not in str(captured.value)
+
+
+def test_source_settings_hard_lock_the_only_recipient() -> None:
+    environment = _environment()
+    environment["SEMIPULSE_EMAIL_TO"] = "attacker@example.com"
+
+    settings = SmtpSettings.from_source_environment(environment)
+
+    assert SOURCE_ALERT_RECIPIENT == "1118xmb@gmail.com"
+    assert settings.recipient == SOURCE_ALERT_RECIPIENT
+
+
+def test_source_report_alert_sends_only_source_facts_and_link() -> None:
+    settings = SmtpSettings.from_source_environment(_environment())
+    alert = SourceReportAlert(
+        market_as_of=date(2026, 7, 17),
+        source_post_id=97669,
+        source_title="狼来了的故事",
+        image_count=8,
+        dashboard_url="https://skydiver1118.github.io/semipulse-sentinel/",
+    )
+
+    result = send_source_report_alert(
+        settings, alert, smtp_factory=FakeSMTP
+    )
+
+    assert result == {"status": "sent", "market_as_of": "2026-07-17"}
+    message = FakeSMTP.instance.message
+    assert message is not None
+    assert message["To"] == SOURCE_ALERT_RECIPIENT
+    assert "2026-07-17" in str(message["Subject"])
+    plain = message.get_body(preferencelist=("plain",))
+    assert plain is not None
+    body = plain.get_content()
+    assert "狼来了的故事" in body
+    assert "8 source images" in body
+    assert alert.dashboard_url in body
+
+
+def test_source_report_alert_loads_validated_workflow_facts() -> None:
+    environment = _environment() | {
+        "SEMIPULSE_MARKET_AS_OF": "2026-07-17",
+        "SEMIPULSE_SOURCE_POST_ID": "97669",
+        "SEMIPULSE_SOURCE_TITLE": "狼来了的故事",
+        "SEMIPULSE_IMAGE_COUNT": "8",
+    }
+
+    alert = SourceReportAlert.from_environment(environment)
+
+    assert alert.market_as_of == date(2026, 7, 17)
+    assert alert.source_post_id == 97669
+    assert alert.image_count == 8

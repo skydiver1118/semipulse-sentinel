@@ -3,7 +3,7 @@ name: Nightly SemiPulse report
 "on":
   workflow_dispatch: {}
   schedule:
-    - cron: "0 18 * * 1-5"
+    - cron: "20 18 * * 1-5"
       timezone: "America/New_York"
 
 permissions:
@@ -17,7 +17,6 @@ env:
   PYTHONHASHSEED: "0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_INPUT: "1"
-  MPLBACKEND: Agg
   TZ: America/New_York
 
 jobs:
@@ -30,9 +29,9 @@ jobs:
     outputs:
       has_new_data: "${{ steps.publication.outputs.has_new_data }}"
       market_as_of: "${{ steps.publication.outputs.market_as_of }}"
-      regime: "${{ steps.publication.outputs.regime }}"
-      confidence: "${{ steps.publication.outputs.confidence }}"
-      coverage: "${{ steps.publication.outputs.coverage }}"
+      source_post_id: "${{ steps.publication.outputs.source_post_id }}"
+      source_title: "${{ steps.publication.outputs.source_title }}"
+      image_count: "${{ steps.publication.outputs.image_count }}"
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -56,25 +55,44 @@ jobs:
       - name: Run offline tests
         run: python -m pytest -q
 
-      - name: Build report
+      - name: Check market session
+        id: session
         run: >-
-          python -m semipulse_sentinel build --watchlist config/watchlist.csv
+          python -m semipulse_sentinel check-market-session
+          --github-output "$GITHUB_OUTPUT" --json
+
+      - name: Build source report
+        if: >-
+          steps.session.outputs.should_run == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: >-
+          python -m semipulse_sentinel build-source
           --output candidate-site --json
 
-      - name: Validate site
+      - name: Validate source site
+        if: >-
+          steps.session.outputs.should_run == 'true' ||
+          github.event_name == 'workflow_dispatch'
         run: >-
-          python -m semipulse_sentinel validate --site candidate-site --json
+          python -m semipulse_sentinel validate-source
+          --site candidate-site --json
 
       - name: Fetch published report
+        if: >-
+          steps.session.outputs.should_run == 'true' ||
+          github.event_name == 'workflow_dispatch'
         run: >-
           curl --fail --show-error --silent --location --retry 3
           --output published-report.json
           "https://skydiver1118.github.io/semipulse-sentinel/report.json?run_id=${GITHUB_RUN_ID}"
 
-      - name: Decide publication
+      - name: Decide source publication
         id: publication
+        if: >-
+          steps.session.outputs.should_run == 'true' ||
+          github.event_name == 'workflow_dispatch'
         run: >-
-          python -m semipulse_sentinel decide-publication
+          python -m semipulse_sentinel decide-source-publication
           --candidate candidate-site/report.json
           --published published-report.json
           --github-output "$GITHUB_OUTPUT" --json
@@ -136,10 +154,9 @@ jobs:
           SEMIPULSE_SMTP_USER: "${{ secrets.SEMIPULSE_SMTP_USER }}"
           SEMIPULSE_SMTP_PASSWORD: "${{ secrets.SEMIPULSE_SMTP_PASSWORD }}"
           SEMIPULSE_EMAIL_FROM: "${{ secrets.SEMIPULSE_EMAIL_FROM }}"
-          SEMIPULSE_EMAIL_TO: "${{ secrets.SEMIPULSE_EMAIL_TO }}"
           SEMIPULSE_MARKET_AS_OF: "${{ needs.build.outputs.market_as_of }}"
-          SEMIPULSE_REGIME: "${{ needs.build.outputs.regime }}"
-          SEMIPULSE_CONFIDENCE: "${{ needs.build.outputs.confidence }}"
-          SEMIPULSE_COVERAGE: "${{ needs.build.outputs.coverage }}"
+          SEMIPULSE_SOURCE_POST_ID: "${{ needs.build.outputs.source_post_id }}"
+          SEMIPULSE_SOURCE_TITLE: "${{ needs.build.outputs.source_title }}"
+          SEMIPULSE_IMAGE_COUNT: "${{ needs.build.outputs.image_count }}"
           SEMIPULSE_DASHBOARD_URL: "https://skydiver1118.github.io/semipulse-sentinel/"
-        run: python -m semipulse_sentinel notify --json
+        run: python -m semipulse_sentinel notify-source --json

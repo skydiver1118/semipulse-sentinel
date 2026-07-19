@@ -101,10 +101,10 @@ def test_doctor_is_offline_and_reports_missing_site_as_diagnosis(
     assert code == 0
     assert payload["site_state"] == "missing"
     assert payload["schedule"] == {
-        "cron": "0 18 * * 1-5",
+        "cron": "20 18 * * 1-5",
         "timezone": "America/New_York",
         "description": (
-            "Monday through Friday at 6:00 PM America/New_York; publish only "
+            "Monday through Friday at 6:20 PM America/New_York; publish only "
             "when the completed market session advances"
         ),
     }
@@ -318,6 +318,30 @@ def test_notify_failure_is_sanitized_before_heavy_cli_imports(
         "status": "error",
     }
     assert "upstream-secret-detail" not in output
+
+
+def test_notify_source_uses_fixed_recipient_path_and_safe_output(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _notification_environment(monkeypatch)
+    monkeypatch.setenv("SEMIPULSE_MARKET_AS_OF", "2026-07-17")
+    monkeypatch.setenv("SEMIPULSE_SOURCE_POST_ID", "97669")
+    monkeypatch.setenv("SEMIPULSE_SOURCE_TITLE", "狼来了的故事")
+    monkeypatch.setenv("SEMIPULSE_IMAGE_COUNT", "8")
+
+    def send_once(*_args: object, **_kwargs: object) -> dict[str, str]:
+        return {"status": "sent", "market_as_of": "2026-07-17"}
+
+    monkeypatch.setattr(notifications, "send_source_report_alert", send_once)
+
+    assert main(["notify-source", "--json"]) == 0
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "market_as_of": "2026-07-17",
+        "status": "sent",
+    }
+    assert "1118xmb" not in output
+    assert "secret-app-password" not in output
 
 
 def test_unexpected_cli_error_is_sanitized(

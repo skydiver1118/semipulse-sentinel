@@ -9,7 +9,7 @@ from semipulse_sentinel.models import ReportSchedule
 
 
 def test_weekday_schedule_contract_is_exact() -> None:
-    assert SCHEDULE_CRON == "0 18 * * 1-5"
+    assert SCHEDULE_CRON == "20 18 * * 1-5"
     assert SCHEDULE_TIMEZONE == "America/New_York"
     assert "Monday through Friday" in SCHEDULE_DESCRIPTION
     assert "market session advances" in SCHEDULE_DESCRIPTION
@@ -21,7 +21,7 @@ def test_report_schedule_accepts_only_the_weekday_contract() -> None:
     ReportSchedule(SCHEDULE_CRON, SCHEDULE_TIMEZONE, SCHEDULE_DESCRIPTION)
 
     try:
-        ReportSchedule("0 18 * * *", SCHEDULE_TIMEZONE, "legacy")
+        ReportSchedule("0 18 * * 1-5", SCHEDULE_TIMEZONE, "legacy")
     except ValueError as error:
         assert "weekdays" in str(error)
     else:

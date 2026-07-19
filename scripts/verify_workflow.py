@@ -41,8 +41,6 @@ def _construct_unique_mapping(
                 "merge keys are prohibited",
                 key_node.start_mark,
             )
-
-    loader.flatten_mapping(node)
     output: dict[object, object] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
@@ -71,35 +69,18 @@ _UniqueKeyLoader.add_constructor(
     _construct_unique_mapping,
 )
 
-_ACTIONS = (
-    (
-        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-        "v7.0.0",
-    ),
-    (
-        "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
-        "v6.3.0",
-    ),
-    (
-        "actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d",
-        "v6.0.0",
-    ),
-    (
-        "actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9",
-        "v5.0.0",
-    ),
-    (
-        "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
-        "v5.0.0",
-    ),
-    (
-        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-        "v7.0.0",
-    ),
-    (
-        "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
-        "v6.3.0",
-    ),
+_CHECKOUT = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+_SETUP = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+_CONFIGURE = (
+    "actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d"
+)
+_UPLOAD = (
+    "actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9"
+)
+_DEPLOY = "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128"
+_SCAN_IF = (
+    "steps.session.outputs.should_run == 'true' || "
+    "github.event_name == 'workflow_dispatch'"
 )
 
 _EXPECTED: dict[str, object] = {
@@ -107,7 +88,7 @@ _EXPECTED: dict[str, object] = {
     "on": {
         "workflow_dispatch": {},
         "schedule": [
-            {"cron": "0 18 * * 1-5", "timezone": "America/New_York"}
+            {"cron": "20 18 * * 1-5", "timezone": "America/New_York"}
         ],
     },
     "permissions": {"contents": "read"},
@@ -116,7 +97,6 @@ _EXPECTED: dict[str, object] = {
         "PYTHONHASHSEED": "0",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "PIP_NO_INPUT": "1",
-        "MPLBACKEND": "Agg",
         "TZ": "America/New_York",
     },
     "jobs": {
@@ -127,19 +107,21 @@ _EXPECTED: dict[str, object] = {
             "outputs": {
                 "has_new_data": "${{ steps.publication.outputs.has_new_data }}",
                 "market_as_of": "${{ steps.publication.outputs.market_as_of }}",
-                "regime": "${{ steps.publication.outputs.regime }}",
-                "confidence": "${{ steps.publication.outputs.confidence }}",
-                "coverage": "${{ steps.publication.outputs.coverage }}",
+                "source_post_id": (
+                    "${{ steps.publication.outputs.source_post_id }}"
+                ),
+                "source_title": "${{ steps.publication.outputs.source_title }}",
+                "image_count": "${{ steps.publication.outputs.image_count }}",
             },
             "steps": [
                 {
                     "name": "Checkout",
-                    "uses": _ACTIONS[0][0],
+                    "uses": _CHECKOUT,
                     "with": {"persist-credentials": False},
                 },
                 {
                     "name": "Set up Python",
-                    "uses": _ACTIONS[1][0],
+                    "uses": _SETUP,
                     "with": {"python-version": "3.11.15"},
                 },
                 {
@@ -151,9 +133,7 @@ _EXPECTED: dict[str, object] = {
                 },
                 {
                     "name": "Install project",
-                    "run": (
-                        "python -m pip install --no-deps --no-build-isolation ."
-                    ),
+                    "run": "python -m pip install --no-deps --no-build-isolation .",
                 },
                 {
                     "name": "Verify workflow",
@@ -164,21 +144,32 @@ _EXPECTED: dict[str, object] = {
                 },
                 {"name": "Run offline tests", "run": "python -m pytest -q"},
                 {
-                    "name": "Build report",
+                    "name": "Check market session",
+                    "id": "session",
                     "run": (
-                        "python -m semipulse_sentinel build --watchlist "
-                        "config/watchlist.csv --output candidate-site --json"
+                        "python -m semipulse_sentinel check-market-session "
+                        '--github-output "$GITHUB_OUTPUT" --json'
                     ),
                 },
                 {
-                    "name": "Validate site",
+                    "name": "Build source report",
+                    "if": _SCAN_IF,
                     "run": (
-                        "python -m semipulse_sentinel validate "
+                        "python -m semipulse_sentinel build-source "
+                        "--output candidate-site --json"
+                    ),
+                },
+                {
+                    "name": "Validate source site",
+                    "if": _SCAN_IF,
+                    "run": (
+                        "python -m semipulse_sentinel validate-source "
                         "--site candidate-site --json"
                     ),
                 },
                 {
                     "name": "Fetch published report",
+                    "if": _SCAN_IF,
                     "run": (
                         "curl --fail --show-error --silent --location --retry 3 "
                         "--output published-report.json "
@@ -187,10 +178,11 @@ _EXPECTED: dict[str, object] = {
                     ),
                 },
                 {
-                    "name": "Decide publication",
+                    "name": "Decide source publication",
                     "id": "publication",
+                    "if": _SCAN_IF,
                     "run": (
-                        "python -m semipulse_sentinel decide-publication "
+                        "python -m semipulse_sentinel decide-source-publication "
                         "--candidate candidate-site/report.json "
                         "--published published-report.json "
                         '--github-output "$GITHUB_OUTPUT" --json'
@@ -199,12 +191,12 @@ _EXPECTED: dict[str, object] = {
                 {
                     "name": "Configure Pages",
                     "if": "steps.publication.outputs.has_new_data == 'true'",
-                    "uses": _ACTIONS[2][0],
+                    "uses": _CONFIGURE,
                 },
                 {
                     "name": "Upload Pages artifact",
                     "if": "steps.publication.outputs.has_new_data == 'true'",
-                    "uses": _ACTIONS[3][0],
+                    "uses": _UPLOAD,
                     "with": {
                         "name": "github-pages",
                         "path": "candidate-site",
@@ -227,7 +219,7 @@ _EXPECTED: dict[str, object] = {
                 {
                     "name": "Deploy Pages",
                     "id": "deployment",
-                    "uses": _ACTIONS[4][0],
+                    "uses": _DEPLOY,
                 }
             ],
         },
@@ -244,12 +236,12 @@ _EXPECTED: dict[str, object] = {
             "steps": [
                 {
                     "name": "Checkout notification source",
-                    "uses": _ACTIONS[5][0],
+                    "uses": _CHECKOUT,
                     "with": {"persist-credentials": False},
                 },
                 {
                     "name": "Set up notification Python",
-                    "uses": _ACTIONS[6][0],
+                    "uses": _SETUP,
                     "with": {"python-version": "3.11.15"},
                 },
                 {
@@ -270,202 +262,99 @@ _EXPECTED: dict[str, object] = {
                         "SEMIPULSE_EMAIL_FROM": (
                             "${{ secrets.SEMIPULSE_EMAIL_FROM }}"
                         ),
-                        "SEMIPULSE_EMAIL_TO": (
-                            "${{ secrets.SEMIPULSE_EMAIL_TO }}"
-                        ),
                         "SEMIPULSE_MARKET_AS_OF": (
                             "${{ needs.build.outputs.market_as_of }}"
                         ),
-                        "SEMIPULSE_REGIME": (
-                            "${{ needs.build.outputs.regime }}"
+                        "SEMIPULSE_SOURCE_POST_ID": (
+                            "${{ needs.build.outputs.source_post_id }}"
                         ),
-                        "SEMIPULSE_CONFIDENCE": (
-                            "${{ needs.build.outputs.confidence }}"
+                        "SEMIPULSE_SOURCE_TITLE": (
+                            "${{ needs.build.outputs.source_title }}"
                         ),
-                        "SEMIPULSE_COVERAGE": (
-                            "${{ needs.build.outputs.coverage }}"
+                        "SEMIPULSE_IMAGE_COUNT": (
+                            "${{ needs.build.outputs.image_count }}"
                         ),
                         "SEMIPULSE_DASHBOARD_URL": (
-                            "https://skydiver1118.github.io/semipulse-sentinel/"
+                            "https://skydiver1118.github.io/"
+                            "semipulse-sentinel/"
                         ),
                     },
-                    "run": "python -m semipulse_sentinel notify --json",
+                    "run": "python -m semipulse_sentinel notify-source --json",
                 },
             ],
         },
     },
 }
 
+_ACTION_COMMENTS = {
+    f"uses: {_CHECKOUT} # v7.0.0": 2,
+    f"uses: {_SETUP} # v6.3.0": 2,
+    f"uses: {_CONFIGURE} # v6.0.0": 1,
+    f"uses: {_UPLOAD} # v5.0.0": 1,
+    f"uses: {_DEPLOY} # v5.0.0": 1,
+}
+_SECRET_NAMES = {
+    "SEMIPULSE_SMTP_HOST",
+    "SEMIPULSE_SMTP_PORT",
+    "SEMIPULSE_SMTP_USER",
+    "SEMIPULSE_SMTP_PASSWORD",
+    "SEMIPULSE_EMAIL_FROM",
+}
 
-def _fail(message: str) -> None:
-    raise WorkflowVerificationError(message)
 
-
-def _compare(actual: object, expected: object, location: str) -> None:
-    if type(actual) is not type(expected):
-        _fail(
-            f"{location} has type {type(actual).__name__}; "
-            f"expected {type(expected).__name__}"
-        )
-    if isinstance(expected, Mapping):
-        actual_mapping = actual
-        assert isinstance(actual_mapping, Mapping)
-        if set(actual_mapping) != set(expected):
-            _fail(
-                f"{location} keys are {sorted(map(str, actual_mapping))}; "
-                f"expected {sorted(map(str, expected))}"
+def _load(text: str) -> Mapping[str, object]:
+    for token in yaml.scan(text):
+        if isinstance(token, (AliasToken, AnchorToken, TagToken)):
+            raise WorkflowVerificationError(
+                "anchors, aliases, and explicit tags are prohibited"
             )
-        for key, expected_value in expected.items():
-            _compare(actual_mapping[key], expected_value, f"{location}.{key}")
-        return
-    if isinstance(expected, list):
-        actual_sequence = actual
-        assert isinstance(actual_sequence, list)
-        if len(actual_sequence) != len(expected):
-            _fail(
-                f"{location} has {len(actual_sequence)} entries; "
-                f"expected {len(expected)}"
-            )
-        for index, (actual_value, expected_value) in enumerate(
-            zip(actual_sequence, expected, strict=True)
-        ):
-            _compare(actual_value, expected_value, f"{location}[{index}]")
-        return
-    if actual != expected:
-        _fail(f"{location} is {actual!r}; expected {expected!r}")
-
-
-def _require_double_quoted_on(text: str) -> None:
-    node = yaml.compose(text, Loader=yaml.SafeLoader)
-    if not isinstance(node, MappingNode):
-        _fail("workflow root must be a mapping")
-    matches = [
-        key
-        for key, _value in node.value
-        if isinstance(key, ScalarNode) and key.value == "on"
-    ]
-    if len(matches) != 1 or matches[0].tag != "tag:yaml.org,2002:str":
-        _fail('top-level "on" must be a string key')
-    if matches[0].style != '"':
-        _fail('top-level "on" must use double quotes')
-
-
-def _load(text: str) -> dict[object, object]:
+    loader = _UniqueKeyLoader(text)
     try:
-        if any(
-            isinstance(token, (AnchorToken, AliasToken, TagToken))
-            for token in yaml.scan(text)
-        ):
-            _fail("anchors, aliases, and explicit tags are prohibited")
-        documents = list(yaml.load_all(text, Loader=_UniqueKeyLoader))
-        _require_double_quoted_on(text)
-    except yaml.YAMLError as error:
-        raise WorkflowVerificationError(f"invalid YAML: {error}") from error
-    if len(documents) != 1:
-        _fail("workflow must contain exactly one YAML document")
-    document = documents[0]
-    if not isinstance(document, dict):
-        _fail("workflow root must be a mapping")
-    if True in document:
-        _fail('top-level "on" was coerced to boolean true')
-    return cast(dict[object, object], document)
+        document = loader.get_single_data()
+    finally:
+        loader.dispose()
+    if not isinstance(document, dict) or not all(
+        isinstance(key, str) for key in document
+    ):
+        raise WorkflowVerificationError("workflow root must be a string-key mapping")
+    return cast(Mapping[str, object], document)
 
 
-def _uses_values(document: Mapping[object, object]) -> list[str]:
-    jobs = document["jobs"]
-    assert isinstance(jobs, Mapping)
-    values: list[str] = []
-    for job in jobs.values():
-        assert isinstance(job, Mapping)
-        steps = job["steps"]
-        assert isinstance(steps, Sequence)
-        for step in steps:
-            assert isinstance(step, Mapping)
-            uses = step.get("uses")
-            if isinstance(uses, str):
-                values.append(uses)
-    return values
-
-
-def _verify_security(text: str, document: Mapping[object, object]) -> None:
-    lowered = text.casefold()
-    for marker in ("${{ github.token", "contents: write"):
-        if marker in lowered:
-            _fail(f"forbidden credential or permission marker: {marker}")
-    allowed_secrets = {
-        "SEMIPULSE_SMTP_HOST",
-        "SEMIPULSE_SMTP_PORT",
-        "SEMIPULSE_SMTP_USER",
-        "SEMIPULSE_SMTP_PASSWORD",
-        "SEMIPULSE_EMAIL_FROM",
-        "SEMIPULSE_EMAIL_TO",
-    }
-    observed_secrets = set(
-        re.findall(r"\$\{\{ secrets\.([A-Z0-9_]+) \}\}", text)
-    )
-    if observed_secrets != allowed_secrets:
-        _fail("workflow must use only the exact SemiPulse notification secrets")
-    if _uses_values(document) != [reference for reference, _version in _ACTIONS]:
-        _fail("workflow actions must be first-party and pinned exactly once")
-
-    jobs = document["jobs"]
-    assert isinstance(jobs, Mapping)
-    build = jobs["build"]
-    assert isinstance(build, Mapping)
-    steps = build["steps"]
-    assert isinstance(steps, list)
-    build_index = next(
-        index
-        for index, step in enumerate(steps)
-        if isinstance(step, Mapping) and step.get("name") == "Build report"
-    )
-    prebuild = "\n".join(
-        str(step.get("run", ""))
-        for step in steps[:build_index]
-        if isinstance(step, Mapping)
-    ).casefold()
-    for marker in ("curl ", "wget ", "http://", "https://", "yfinance"):
-        if marker in prebuild:
-            _fail(f"network-capable command appears before the live build: {marker}")
-    if lowered.count("semipulse_sentinel build") != 1:
-        _fail("workflow must contain exactly one live report build")
-    if lowered.count("semipulse_sentinel decide-publication") != 1:
-        _fail("workflow must contain exactly one publication decision")
-    if lowered.count("semipulse_sentinel notify") != 1:
-        _fail("workflow must contain exactly one notification command")
-
-
-def _verify_action_comments(text: str) -> None:
-    lines = re.findall(r"^\s*uses:\s*(\S+)\s+#\s*(v\d+\.\d+\.\d+)\s*$", text, re.M)
-    if lines != list(_ACTIONS):
-        _fail("every action must have its exact adjacent version comment")
-
-
-def verify_workflow(path: Path) -> None:
-    """Verify one workflow file against the complete audited contract."""
-
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        raise WorkflowVerificationError(f"workflow unreadable: {error}") from error
+def verify(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
     document = _load(text)
-    _compare(document, _EXPECTED, "workflow")
-    _verify_security(text, document)
-    _verify_action_comments(text)
+    if document != _EXPECTED:
+        raise WorkflowVerificationError(
+            "workflow differs from the exact audited source-copy contract"
+        )
+    for marker, count in _ACTION_COMMENTS.items():
+        if text.count(marker) != count:
+            raise WorkflowVerificationError(
+                "action pins require exact adjacent version comments"
+            )
+    secrets = set(
+        re.findall(r"\$\{\{ secrets\.([A-Za-z0-9_]+) \}\}", text)
+    )
+    if secrets != _SECRET_NAMES:
+        raise WorkflowVerificationError(
+            "workflow must use only the exact source-alert secrets"
+        )
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("workflow", type=Path)
+    return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the workflow verifier as a deterministic offline CLI."""
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("path", type=Path)
-    arguments = parser.parse_args(argv)
+    arguments = _parser().parse_args(argv)
     try:
-        verify_workflow(arguments.path)
-    except WorkflowVerificationError as error:
-        print(f"workflow invalid: {arguments.path}: {error}", file=sys.stderr)
+        verify(arguments.workflow)
+    except (OSError, UnicodeError, yaml.YAMLError, WorkflowVerificationError) as error:
+        print(f"workflow invalid: {error}", file=sys.stderr)
         return 1
-    print(f"workflow valid: {arguments.path}")
+    print("workflow valid")
     return 0
 
 
