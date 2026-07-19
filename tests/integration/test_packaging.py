@@ -96,7 +96,11 @@ def test_isolated_wheel_install_contains_template_and_stylesheet(
                 "assert '<!doctype html>' in "
                 "root.joinpath('templates/report.html.j2').read_text('utf-8'); "
                 "assert ':root' in "
-                "root.joinpath('static/report.css').read_text('utf-8')"
+                "root.joinpath('static/report.css').read_text('utf-8'); "
+                "assert 'Copied from source' in "
+                "root.joinpath('templates/source_report.html.j2').read_text('utf-8'); "
+                "assert '.chart-card' in "
+                "root.joinpath('static/source_report.css').read_text('utf-8')"
             ),
         ],
         cwd=probe_cwd,
