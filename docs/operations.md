@@ -1,31 +1,62 @@
 # Operations
 
-The canonical repository is `skydiver1118/semipulse-sentinel`. GitHub Pages
-serves the last successfully deployed report at:
+This runbook covers the live repository `skydiver1118/semipulse-sentinel` and
+the daily `semipulse-report-v1` decision report. Canonical interfaces:
 
+- `https://github.com/skydiver1118/semipulse-sentinel`
 - `https://skydiver1118.github.io/semipulse-sentinel/`
 - `https://skydiver1118.github.io/semipulse-sentinel/report.json`
 
-## Schedule and last-good behavior
+The JSON is authoritative for `market_as_of`, freshness, coverage, the
+**Trading decision summary**, and all chart explanations. A failed fetch is an
+operational failure, not evidence of a neutral regime.
 
-The workflow starts Monday through Friday at **6:20 PM America/New_York** with
-the timezone-aware schedule `20 18 * * 1-5`. The daylight saving time change is handled by
-the named timezone. GitHub Actions scheduling is best effort and may start
-late. Public-repository schedules may be disabled after 60 days without
-activity, and forks begin with schedules disabled.
+## Operator review checklist
 
-The `check-market-session` command uses the XNYS calendar. An automatic run
-continues only when the local date is an exchange session and the 6:00 PM
-post-close cutoff has passed. `workflow_dispatch` is the explicit manual
-recovery path and may check the most recent source outside that automatic gate.
+Confirm schema `semipulse-report-v1`, then report `market_as_of`, freshness,
+covered/watchlist counts and ratio, regime, confidence, strongest supports,
+strongest challenges, change triggers, exclusions, limitations, and the
+canonical link. Review all eight chart purposes:
 
-The source pipeline runs `build-source`, `validate-source`, and
-`decide-source-publication`. A new post or changed ordered hashes deploys. If
-there is no new source data, deploy and email are skipped and the last
-successful Page stays live. Network, validation, regression, or current-report
-failures also fail closed without replacing the Page.
+1. **Semiconductor complex performance** - benchmark direction.
+2. **Relative strength versus QQQ** - semiconductor leadership.
+3. **Watchlist breadth** - moving-average participation.
+4. **Equal-weight participation** - median constituent confirmation.
+5. **Momentum leaders and laggards** - 20-session return distribution.
+6. **Multi-horizon trend heatmap** - cross-horizon agreement and reversals.
+7. **Volatility and peak-distance regime** - observed stress conditions.
+8. **Risk/reward map** - return, volatility, and liquidity context.
 
-Restore an inactive schedule and request a manual scan with:
+For every card, verify the visible **What this chart measures**, **Evidence**,
+**What it means now**, **How it may inform trading decisions**, and
+**Counter-signal** sections against the corresponding flattened `charts[]`
+fields. Keep freshness and coverage distinct and preserve the report's
+limitations and risk warning.
+
+## Schedule, XNYS gate, and last-good behavior
+
+The workflow requests a run Monday through Friday at **6:20 PM Eastern** using
+the timezone-aware schedule `20 18 * * 1-5` in `America/New_York`. The named
+timezone handles daylight saving time. GitHub Actions scheduling is best
+effort and may start late; public-repository schedules may be disabled after 60
+days without activity, and forks begin with schedules disabled.
+
+`check-market-session` uses the XNYS exchange calendar. A scheduled run
+continues only when the New York date is a trading session and that session is
+complete. A manual `workflow_dispatch` is the explicit recovery path and can
+proceed outside the automatic gate, while the report's normal data-quality and
+publication checks still apply.
+
+If there is no new market data, deployment and email are skipped.
+
+The daily sequence is `build`, `validate`, `decide-publication`, Pages deploy,
+then `notify`. A validated later `market_as_of` deploys. The current public
+schema can also migrate once to the daily schema without relaxing candidate
+validation. An unchanged date skips deployment and email. Regressed dates,
+invalid candidates, failed builds, and current-report failures fail closed, so
+the last successful Page remains online rather than a blank or partial report.
+
+Restore an inactive schedule and request a manual run with:
 
 ```powershell
 gh workflow enable nightly-report.yml --repo skydiver1118/semipulse-sentinel
@@ -36,6 +67,28 @@ gh run list --repo skydiver1118/semipulse-sentinel --workflow nightly-report.yml
 Concurrency uses the `semipulse-pages` group, so a newer run cancels an older
 in-flight run.
 
+## Local daily verification
+
+Use Python 3.11 or later from the repository root:
+
+```powershell
+python -m pip install --require-hashes -r requirements.lock
+python -m pip install --no-deps --no-build-isolation .
+python scripts/verify_workflow.py .github/workflows/nightly-report.yml
+python -m pytest -q
+python -m semipulse_sentinel doctor --watchlist config/watchlist.csv --site site --json
+python -m semipulse_sentinel build --watchlist config/watchlist.csv --output candidate-site --json
+python -m semipulse_sentinel validate --site candidate-site --json
+python -m semipulse_sentinel decide-publication --candidate candidate-site/report.json --published published-report.json --github-output publication-output.txt --json
+python -m semipulse_sentinel notify --json
+```
+
+`doctor` is offline. `build` is the explicit provider network boundary and is
+failure-atomic. Do not upload a candidate unless `validate` succeeds.
+`decide-publication` requires a validated candidate, the fetched public JSON,
+and a GitHub-output path. `notify` is reserved for the post-deploy workflow; a
+manual local call requires the documented SMTP and report-summary environment.
+
 ## GitHub Pages setup and recovery
 
 Pages enablement is an out-of-band repository setting. Select **GitHub
@@ -43,32 +96,17 @@ Actions** as the Pages source. The build job has read-only repository and Pages
 access; the separate deploy job receives only `pages: write` and
 `id-token: write`.
 
-After a changed deployment, verify HTTP 200 for the page and JSON. Confirm the
-schema, source post, image count, and every local image hash. For a Pages
-failure after artifact upload, retry the run. Do not edit generated Pages
-content or weaken validation.
-
-## Local source build
-
-```powershell
-python -m pip install --require-hashes -r requirements.lock
-python -m pip install --no-deps --no-build-isolation .
-python scripts/verify_workflow.py .github/workflows/nightly-report.yml
-python -m pytest -q
-python -m semipulse_sentinel build-source --output site --json
-python -m semipulse_sentinel validate-source --site site --json
-```
-
-The networked build copies the allowlisted source images byte-for-byte into a
-staging site. Validation requires `semipulse-wenxuecity-source-v1`, canonical
-source metadata, 1-12 images, exact files, matching SHA-256 values, and no
-unexpected artifacts.
+After a deployment, verify HTTP 200 for the page and JSON. Require
+`semipulse-report-v1`, the expected `market_as_of`, exactly eight chart records,
+the **Trading decision summary**, valid freshness and coverage, and all chart
+assets. Retry a Pages platform failure after artifact upload. Do not edit
+generated output or weaken validation.
 
 ## Email delivery
 
-The `notify-source` command runs only after a changed Pages deployment. Its
-recipient is hard-locked in code to `1118xmb@gmail.com`; no recipient secret is
-read. Configure these encrypted repository secrets:
+The `notify` command runs only after a changed Pages deployment succeeds. Its
+sole recipient is hard-locked in code to `1118xmb@gmail.com`; no recipient
+secret is read. Configure these encrypted repository secrets:
 
 - `SEMIPULSE_SMTP_HOST`
 - `SEMIPULSE_SMTP_PORT`
@@ -81,9 +119,9 @@ email failure does not roll back a successful report deployment.
 
 ## Exit codes
 
-- **Exit code 0**: operation succeeded, including an unchanged trading-day gate.
-- **Exit code 2**: configuration, input, source, or validation error.
-- **Exit code 3**: legacy publication gate blocked a report.
+- **Exit code 0**: operation succeeded, including a skipped automatic gate.
+- **Exit code 2**: configuration, input, or validation argument error.
+- **Exit code 3**: publication was blocked by quality or site validation.
 - **Exit code 4**: notification, build orchestration, or unexpected failure.
 
 Research only - not individualized investment advice. Do not add broker

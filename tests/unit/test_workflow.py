@@ -751,37 +751,66 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
     assert "skydiver1118/semipulse-sentinel" in readme
     assert "https://skydiver1118.github.io/semipulse-sentinel/" in readme
     assert "https://skydiver1118.github.io/semipulse-sentinel/report.json" in readme
-    assert "copied byte-for-byte" in readme
+    assert "semipulse-report-v1" in readme
+    assert "market_as_of" in readme
+    assert "Trading decision summary" in readme
+    assert "6:20 PM Eastern" in readme
+    assert "XNYS" in readme
     assert "docs/methodology.md" in readme
     assert "docs/operations.md" in readme
     assert "Monday through Friday" in readme
     assert "1118xmb@gmail.com" in readme
+    chart_purposes = (
+        "Semiconductor complex performance",
+        "Relative strength versus QQQ",
+        "Watchlist breadth",
+        "Equal-weight participation",
+        "Momentum leaders and laggards",
+        "Multi-horizon trend heatmap",
+        "Volatility and peak-distance regime",
+        "Risk/reward map",
+    )
+    assert all(purpose in readme for purpose in chart_purposes)
+    assert all(purpose in methodology for purpose in chart_purposes)
+    assert all(purpose in operations for purpose in chart_purposes)
     assert all(
         phrase in methodology_flat
         for phrase in (
-            "semipulse-wenxuecity-source-v1",
-            "https://bbs.wenxuecity.com/cfzh/97669.html",
-            "byte-for-byte",
-            "ordered SHA-256",
-            "exact author",
-            "semiconductor markers",
-            "at most five",
-            "1 to 12",
-            "8 MiB",
-            "source post ID",
-            "publication date",
-            "image manifest changes",
-            "no newer or revised source",
+            "semipulse-report-v1",
+            "market_as_of",
+            "Trading decision summary",
+            "What this chart measures",
+            "Evidence",
+            "What it means now",
+            "How it may inform trading decisions",
+            "Counter-signal",
+            "absolute trend: 25%",
+            "relative leadership: 20%",
+            "breadth and participation: 25%",
+            "momentum distribution: 15%",
+            "volatility/drawdown risk: 15%",
+            "2 * vote sum / fixed input count",
+            "current",
+            "delayed",
+            "stale",
+            "70%",
+            "6:20 PM Eastern",
+            "XNYS",
+            "last successful report",
+            "1118xmb@gmail.com",
             "Research only",
-            "does not calculate",
         )
     )
     assert all(
         phrase in operations_flat
         for phrase in (
-            "6:20 PM America/New_York",
+            "semipulse-report-v1",
+            "market_as_of",
+            "Trading decision summary",
+            "6:20 PM Eastern",
             "Monday through Friday",
             "20 18 * * 1-5",
+            "XNYS",
             "daylight saving time",
             "best effort",
             "60 days",
@@ -789,14 +818,14 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
             "workflow_dispatch",
             "out-of-band",
             "last successful Page",
-            "no new source data",
+            "no new market data",
             "1118xmb@gmail.com",
             "SEMIPULSE_SMTP_PASSWORD",
             "check-market-session",
-            "build-source",
-            "validate-source",
-            "decide-source-publication",
-            "notify-source",
+            "python -m semipulse_sentinel build --watchlist",
+            "python -m semipulse_sentinel validate --site",
+            "python -m semipulse_sentinel decide-publication",
+            "python -m semipulse_sentinel notify --json",
             "Exit code 0",
             "Exit code 2",
             "Exit code 3",
@@ -805,5 +834,13 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
         )
     )
     assert "forks" in operations_flat.casefold()
+    forbidden = (
+        "Wenxuecity",
+        "source-copy",
+        "exact author",
+        "\u4e91\u8d77\u5343\u767e\u5ea6",
+    )
+    for document in (readme, methodology, operations):
+        assert all(term.casefold() not in document.casefold() for term in forbidden)
     assert "MIT License" in license_text
     assert "Copyright (c) 2026 skydiver1118" in license_text
