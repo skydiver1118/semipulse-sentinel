@@ -57,6 +57,46 @@ def _parser() -> argparse.ArgumentParser:
         "notify", help="Send one post-deploy report alert from environment settings"
     )
     notify.add_argument("--json", action="store_true", dest="json_output")
+
+    build_source = commands.add_parser(
+        "build-source",
+        help="Copy the newest qualifying Wenxuecity chart post into a report",
+    )
+    build_source.add_argument("--seed-url")
+    build_source.add_argument("--archive-url")
+    build_source.add_argument("--output", type=Path, default=Path("site"))
+    build_source.add_argument("--json", action="store_true", dest="json_output")
+
+    validate_source = commands.add_parser(
+        "validate-source", help="Validate a source-copy report site"
+    )
+    validate_source.add_argument("--site", type=Path, default=Path("site"))
+    validate_source.add_argument(
+        "--json", action="store_true", dest="json_output"
+    )
+
+    source_publication = commands.add_parser(
+        "decide-source-publication",
+        help="Compare source post identity and ordered image hashes",
+    )
+    source_publication.add_argument("--candidate", type=Path, required=True)
+    source_publication.add_argument("--published", type=Path, required=True)
+    source_publication.add_argument(
+        "--github-output", type=Path, required=True
+    )
+    source_publication.add_argument(
+        "--json", action="store_true", dest="json_output"
+    )
+
+    market_session = commands.add_parser(
+        "check-market-session",
+        help="Gate source scanning on a completed XNYS session",
+    )
+    market_session.add_argument("--at")
+    market_session.add_argument("--github-output", type=Path, required=True)
+    market_session.add_argument(
+        "--json", action="store_true", dest="json_output"
+    )
     return parser
 
 
@@ -68,7 +108,7 @@ def _emit(
         print(
             json.dumps(
                 payload,
-                ensure_ascii=False,
+                ensure_ascii=True,
                 sort_keys=True,
                 separators=(",", ":"),
             ),
@@ -213,6 +253,117 @@ def _notify(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _build_source(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.source_report import build_source_report
+    from semipulse_sentinel.wenxuecity_source import (
+        AUTHOR_ARCHIVE_URL,
+        SEED_POST_URL,
+        discover_latest_source,
+    )
+
+    bundle = discover_latest_source(
+        seed_url=arguments.seed_url or SEED_POST_URL,
+        archive_url=arguments.archive_url or AUTHOR_ARCHIVE_URL,
+        current=None,
+    )
+    if bundle is None:
+        raise ValueError("source discovery returned no report bundle")
+    result = build_source_report(
+        bundle,
+        arguments.output,
+        lambda: datetime.now(UTC),
+    )
+    _emit(
+        {
+            "status": "success",
+            "market_as_of": result.market_as_of.isoformat(),
+            "source_post_id": result.source_post_id,
+            "source_title": result.source_title,
+            "image_count": result.image_count,
+        },
+        json_output=arguments.json_output,
+    )
+    return 0
+
+
+def _validate_source(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.source_report import validate_source_site
+
+    result = validate_source_site(arguments.site)
+    _emit(
+        {
+            "status": "valid",
+            "schema_version": result.schema_version,
+            "market_as_of": result.market_as_of.isoformat(),
+            "source_post_id": result.source_post_id,
+            "image_count": result.image_count,
+        },
+        json_output=arguments.json_output,
+    )
+    return 0
+
+
+def _decide_source_publication(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.source_publication import (
+        append_source_github_outputs,
+        decide_source_publication,
+        read_source_publication_snapshot,
+    )
+
+    candidate = read_source_publication_snapshot(
+        arguments.candidate, require_source=True
+    )
+    published = read_source_publication_snapshot(
+        arguments.published, require_source=False
+    )
+    decision = decide_source_publication(candidate, published)
+    append_source_github_outputs(arguments.github_output, decision)
+    _emit(
+        {
+            "status": "success",
+            "decision": decision.kind,
+            "has_new_data": decision.has_new_data,
+            "market_as_of": candidate.market_as_of.isoformat(),
+            "source_post_id": candidate.source_post_id,
+            "image_count": len(candidate.image_sha256),
+        },
+        json_output=arguments.json_output,
+    )
+    return 0
+
+
+def _check_market_session(arguments: argparse.Namespace) -> int:
+    from semipulse_sentinel.market_session import evaluate_market_session
+
+    if arguments.at:
+        try:
+            now = datetime.fromisoformat(arguments.at)
+        except ValueError as error:
+            raise ValueError("--at must be an ISO timestamp") from error
+    else:
+        now = datetime.now(UTC)
+    decision = evaluate_market_session(now)
+    lines = (
+        f"should_run={'true' if decision.should_run else 'false'}",
+        f"session_date={decision.session_date.isoformat()}",
+        f"reason={decision.reason}",
+    )
+    with arguments.github_output.open(
+        "a", encoding="utf-8", newline="\n"
+    ) as handle:
+        handle.write("\n".join(lines) + "\n")
+    _emit(
+        {
+            "status": "success",
+            "should_run": decision.should_run,
+            "session_date": decision.session_date.isoformat(),
+            "reason": decision.reason,
+        },
+        json_output=arguments.json_output,
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run a command with stable, documented process exit codes."""
 
@@ -228,6 +379,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _decide_publication(arguments)
         if arguments.command == "notify":
             return _notify(arguments)
+        if arguments.command == "build-source":
+            return _build_source(arguments)
+        if arguments.command == "validate-source":
+            return _validate_source(arguments)
+        if arguments.command == "decide-source-publication":
+            return _decide_source_publication(arguments)
+        if arguments.command == "check-market-session":
+            return _check_market_session(arguments)
         raise RuntimeError("unreachable command")
     except KeyboardInterrupt:
         raise

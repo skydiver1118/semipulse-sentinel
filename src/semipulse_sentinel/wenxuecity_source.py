@@ -16,6 +16,11 @@ from urllib.request import Request, build_opener
 SOURCE_AUTHOR = "云起千百度"
 SOURCE_HOST = "bbs.wenxuecity.com"
 CDN_HOST = "cdn.wenxuecity.net"
+SEED_POST_URL = "https://bbs.wenxuecity.com/cfzh/97669.html"
+AUTHOR_ARCHIVE_URL = (
+    "https://bbs.wenxuecity.com/bbs/archive.php?"
+    "SubID=cfzh&keyword=%E4%BA%91%E8%B5%B7%E5%8D%83%E7%99%BE%E5%BA%A6&username=on"
+)
 MAX_HTML_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_IMAGES = 12

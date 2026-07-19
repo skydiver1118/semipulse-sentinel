@@ -35,6 +35,27 @@ def _publication_report(path: Path, market_as_of: str) -> Path:
     return path
 
 
+def _source_publication_report(
+    path: Path,
+    *,
+    post_id: int = 97669,
+    published_at: str = "2026-07-17T21:00:42",
+    digest: str = "a" * 64,
+) -> Path:
+    payload = {
+        "schema_version": "semipulse-wenxuecity-source-v1",
+        "market_as_of": published_at[:10],
+        "source": {
+            "post_id": post_id,
+            "published_at": published_at,
+            "title": "狼来了的故事",
+        },
+        "images": [{"sha256": digest}],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 def _notification_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     values = {
         "SEMIPULSE_SMTP_HOST": "smtp.gmail.com",
@@ -188,6 +209,72 @@ def test_decide_publication_rejects_regressed_date_without_outputs(
     assert payload["category"] == "configuration"
     assert "regressed" in payload["message"]
     assert not github_output.exists()
+
+
+def test_decide_source_publication_emits_revision_outputs(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    candidate = _source_publication_report(
+        tmp_path / "candidate.json", digest="b" * 64
+    )
+    published = _source_publication_report(tmp_path / "published.json")
+    github_output = tmp_path / "github-output"
+
+    code = main(
+        [
+            "decide-source-publication",
+            "--candidate",
+            str(candidate),
+            "--published",
+            str(published),
+            "--github-output",
+            str(github_output),
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "decision": "revised",
+        "has_new_data": True,
+        "image_count": 1,
+        "market_as_of": "2026-07-17",
+        "source_post_id": 97669,
+        "status": "success",
+    }
+    assert "source_title=狼来了的故事" in github_output.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_check_market_session_emits_safe_github_outputs(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    github_output = tmp_path / "github-output"
+
+    code = main(
+        [
+            "check-market-session",
+            "--at",
+            "2026-07-17T18:20:00-04:00",
+            "--github-output",
+            str(github_output),
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "reason": "completed-trading-session",
+        "session_date": "2026-07-17",
+        "should_run": True,
+        "status": "success",
+    }
+    assert github_output.read_text(encoding="utf-8").splitlines() == [
+        "should_run=true",
+        "session_date=2026-07-17",
+        "reason=completed-trading-session",
+    ]
 
 
 def test_notify_emits_only_safe_delivery_metadata(
