@@ -1,6 +1,6 @@
 # SemiPulse Wenxuecity Source Design
 
-**Date:** 2026-07-18  
+**Date:** 2026-07-18
 **Status:** Approved by the user's standing instruction to proceed without another
 approval prompt
 
