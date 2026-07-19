@@ -17,6 +17,10 @@ Pages deploy, then `notify`. If there is no new market data, deployment and
 email are skipped and the last successful report remains live. A newly deployed
 report sends one link to `1118xmb@gmail.com`.
 
+The `semipulse-pages` concurrency group uses `cancel-in-progress: false`, so
+overlapping runs are serialized. A newer run waits and cannot cancel the first
+run between its deployment and notification.
+
 ## Report fields and review order
 
 Require schema `semipulse-report-v1`. The **Trading decision summary** and

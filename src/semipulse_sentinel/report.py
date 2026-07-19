@@ -518,18 +518,13 @@ def _string_list(value: object, name: str, *, nonempty: bool = False) -> list[st
     _require(
         isinstance(value, list)
         and (bool(value) or not nonempty)
-        and all(isinstance(item, str) and bool(item) for item in value),
+        and all(isinstance(item, str) and bool(item.strip()) for item in value),
         name,
     )
     return cast(list[str], value)
 
 
 def _nonempty_string(value: object, name: str) -> str:
-    _require(isinstance(value, str) and bool(value), name)
-    return cast(str, value)
-
-
-def _nonblank_string(value: object, name: str) -> str:
     _require(isinstance(value, str) and bool(value.strip()), name)
     return cast(str, value)
 
@@ -1159,13 +1154,10 @@ def validate_site(path: Path) -> SiteValidation:
         for key in ("calendar_age_days", "expected_session_lag")
     ]
     _require(all(value >= 0 for value in ages), "freshness ages")
-    limitations = report.get("limitations")
-    _require(
-        isinstance(limitations, list)
-        and len(limitations) >= 5
-        and all(isinstance(item, str) and item for item in limitations),
-        "limitations",
+    limitations = _string_list(
+        report.get("limitations"), "limitations", nonempty=True
     )
+    _require(len(limitations) >= 5, "limitations")
 
     images: list[str] = []
     chart_keys = {
@@ -1194,7 +1186,7 @@ def validate_site(path: Path) -> SiteValidation:
         )
         _nonempty_string(chart.get("chart_id"), "chart id")
         _nonempty_string(chart.get("title"), "chart title")
-        _nonblank_string(chart.get("purpose"), "chart purpose missing")
+        _nonempty_string(chart.get("purpose"), "chart purpose missing")
         try:
             image = safe_chart_uri(
                 _nonempty_string(chart.get("image"), "chart image")
@@ -1210,8 +1202,8 @@ def validate_site(path: Path) -> SiteValidation:
             "chart signal",
         )
         _string_list(chart.get("evidence"), "chart evidence", nonempty=True)
-        _nonblank_string(chart.get("interpretation"), "chart interpretation missing")
-        _nonblank_string(chart.get("trading_relevance"), "trading relevance missing")
+        _nonempty_string(chart.get("interpretation"), "chart interpretation missing")
+        _nonempty_string(chart.get("trading_relevance"), "trading relevance missing")
         _nonempty_string(chart.get("counter_signal"), "counter-signal missing")
         _string_list(chart.get("notes"), "chart notes", nonempty=True)
         _require(chart.get("has_non_color_encoding") is True, "non-color encoding")

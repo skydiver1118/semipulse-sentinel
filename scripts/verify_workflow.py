@@ -92,7 +92,7 @@ _EXPECTED: dict[str, object] = {
         ],
     },
     "permissions": {"contents": "read"},
-    "concurrency": {"group": "semipulse-pages", "cancel-in-progress": True},
+    "concurrency": {"group": "semipulse-pages", "cancel-in-progress": False},
     "env": {
         "PYTHONHASHSEED": "0",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",

@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: semipulse-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   PYTHONHASHSEED: "0"

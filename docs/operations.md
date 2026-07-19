@@ -64,8 +64,9 @@ gh workflow run nightly-report.yml --repo skydiver1118/semipulse-sentinel --ref 
 gh run list --repo skydiver1118/semipulse-sentinel --workflow nightly-report.yml --limit 5
 ```
 
-Concurrency uses the `semipulse-pages` group, so a newer run cancels an older
-in-flight run.
+Concurrency uses the `semipulse-pages` group with `cancel-in-progress: false`,
+so overlapping runs are serialized. A newer run waits and cannot cancel an
+older run after deployment but before its notification job finishes.
 
 ## Local daily verification
 

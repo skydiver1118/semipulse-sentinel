@@ -151,6 +151,8 @@ def test_operations_reference_has_canonical_interfaces() -> None:
         "XNYS",
         "limitations",
         "risk_warning",
+        "serialized",
+        "cannot cancel",
     )
     for phrase in required:
         assert phrase in data_flat

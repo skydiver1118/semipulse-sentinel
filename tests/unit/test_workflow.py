@@ -140,6 +140,14 @@ def _mutation_extra_permission(text: str) -> str:
     )
 
 
+def _mutation_enable_cancellation(text: str) -> str:
+    return text.replace(
+        "  cancel-in-progress: false",
+        "  cancel-in-progress: true",
+        1,
+    )
+
+
 def _mutation_build_before_test(text: str) -> str:
     tests = "      - name: Run offline tests\n        run: python -m pytest -q"
     session = (
@@ -357,7 +365,7 @@ def test_workflow_has_exact_top_level_contract() -> None:
     assert document["permissions"] == {"contents": "read"}
     assert document["concurrency"] == {
         "group": "semipulse-pages",
-        "cancel-in-progress": True,
+        "cancel-in-progress": False,
     }
     assert document["env"] == {
         "PYTHONHASHSEED": "0",
@@ -617,6 +625,7 @@ def test_verifier_explicitly_rejects_source_copy_markers(
         _mutation_unquoted_on,
         _mutation_mutable_action,
         _mutation_extra_permission,
+        _mutation_enable_cancellation,
         _mutation_build_before_test,
         _mutation_reordered_jobs,
         _mutation_missing_session_gate,
@@ -831,6 +840,8 @@ def test_public_documentation_covers_identity_methodology_and_operations() -> No
             "Exit code 3",
             "Exit code 4",
             "No credentials",
+            "serialized",
+            "cannot cancel",
         )
     )
     assert "forks" in operations_flat.casefold()

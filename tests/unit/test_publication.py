@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml  # type: ignore[import-untyped]
 
 import semipulse_sentinel.publication as publication
 from semipulse_sentinel.publication import (
@@ -114,6 +115,36 @@ def test_same_date_source_report_allows_one_way_daily_migration(
         "confidence=medium",
         "coverage=21/23 (91.3%)",
     ]
+
+
+def test_overlapping_same_date_migration_serializes_the_first_notification(
+    tmp_path: Path,
+) -> None:
+    candidate_path = _report(tmp_path / "candidate.json", "2026-07-17")
+    candidate = read_report_snapshot(candidate_path)
+    source = publication.read_published_report_snapshot(
+        _source_report(tmp_path / "published-source.json")
+    )
+
+    first = decide_publication(candidate, source)
+    published_daily = publication.read_published_report_snapshot(candidate_path)
+    second = decide_publication(candidate, published_daily)
+    workflow = yaml.safe_load(
+        Path(".github/workflows/nightly-report.yml").read_text(encoding="utf-8")
+    )
+
+    assert first.kind == "migration"
+    assert first.has_new_data is True
+    assert second.kind == "unchanged"
+    assert second.has_new_data is False
+    assert workflow["concurrency"] == {
+        "group": "semipulse-pages",
+        "cancel-in-progress": False,
+    }
+    assert workflow["jobs"]["notify"]["if"] == (
+        "needs.build.outputs.has_new_data == 'true' && "
+        "needs.deploy.result == 'success'"
+    )
 
 
 def test_newer_daily_candidate_migrates_over_source_report(tmp_path: Path) -> None:

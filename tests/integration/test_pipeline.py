@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -97,6 +98,15 @@ def _write_report_and_embedded_payload(
     start = html.index(marker) + len(marker)
     end = html.index("</script>", start)
     index.write_text(html[:start] + payload + html[end:], encoding="utf-8")
+
+
+def _set_nested_value(
+    payload: dict[str, Any], path: tuple[str | int, ...], value: object
+) -> None:
+    target: Any = payload
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = value
 
 
 def _refresh_chart_manifest(site: Path, index: int = 0) -> None:
@@ -490,18 +500,44 @@ def test_validator_rejects_unknown_nested_report_keys(
 
 
 @pytest.mark.parametrize(
-    ("field", "message"),
+    ("path", "message"),
     [
-        ("purpose", "chart purpose missing"),
-        ("interpretation", "chart interpretation missing"),
-        ("trading_relevance", "trading relevance missing"),
+        (("charts", 0, "title"), "chart title"),
+        (("charts", 0, "purpose"), "chart purpose missing"),
+        (("charts", 0, "alt_text"), "chart alt text missing"),
+        (("charts", 0, "headline"), "chart headline missing"),
+        (("charts", 0, "evidence", 0), "chart evidence"),
+        (("charts", 0, "interpretation"), "chart interpretation missing"),
+        (("charts", 0, "trading_relevance"), "trading relevance missing"),
+        (("charts", 0, "counter_signal"), "counter-signal missing"),
+        (("charts", 0, "notes", 0), "chart notes"),
+        (
+            ("executive_summary", "what_changed", 0),
+            "summary what_changed",
+        ),
+        (("executive_summary", "supports", 0), "summary supports"),
+        (("executive_summary", "challenges", 0), "summary challenges"),
+        (
+            ("executive_summary", "what_would_change_the_view", 0),
+            "summary what_would_change_the_view",
+        ),
+        (("executive_summary", "posture"), "posture"),
+        (("executive_summary", "rules_version"), "summary rules"),
+        (
+            ("executive_summary", "pillars", 0, "evidence", 0),
+            "summary pillars evidence",
+        ),
+        (
+            ("executive_summary", "pillars", 0, "counter_evidence", 0),
+            "summary pillars counter evidence",
+        ),
     ],
 )
-def test_validator_rejects_blank_chart_explanations(
-    built_site: Path, field: str, message: str
+def test_validator_rejects_whitespace_only_required_report_prose(
+    built_site: Path, path: tuple[str | int, ...], message: str
 ) -> None:
     report = json.loads((built_site / "report.json").read_text(encoding="utf-8"))
-    report["charts"][0][field] = "   "
+    _set_nested_value(report, path, "   ")
     _write_report_and_embedded_payload(built_site, report)
 
     with pytest.raises(PublicationBlocked, match=message):
