@@ -157,8 +157,9 @@ it into one of these results.
 ## Email configuration and security boundary
 
 The notifier uses Gmail SMTP with STARTTLS only after a newly dated report has
-deployed. The recipient is `1118xmb@gmail.com`; it is not used as the sender.
-Configure these encrypted GitHub Actions secrets:
+deployed. The sole recipient is `1118xmb@gmail.com`. The sender is configured
+independently through the existing SOXL alert account settings. Configure these
+encrypted GitHub Actions secrets:
 
 - `SEMIPULSE_SMTP_HOST`
 - `SEMIPULSE_SMTP_PORT`

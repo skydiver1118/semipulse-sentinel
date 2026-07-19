@@ -17,7 +17,7 @@ Refreshes are requested Monday through Friday at 6:00 PM America/New_York,
 but publication occurs only when the completed market session advances. If
 there is no new market data, the public page keeps the last successful report.
 After each new report deploys, an alert containing the permanent report link
-is sent to the recipient-only address `1118xmb@gmail.com`.
+is sent with `1118xmb@gmail.com` as the sole recipient.
 
 ## What the report contains
 
